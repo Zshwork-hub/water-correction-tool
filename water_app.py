@@ -31,21 +31,23 @@ from water_core import (
     direction_text,
     fmt_value,
     parse_asc,
-    parse_asc_header_lines,
     parse_shapefile_lines,
     resolve_relative_or_absolute,
     write_asc,
 )
 from water_geometry import brush_cells, line_cells
 from water_flow_assist import FlowNetworkAssistant, FlowSegment, direction_from_delta
+from water_history import EditingHistoryMixin
+from water_project import project_data_path, raster_payload, read_project_arrays, read_project_payload, read_session_files, rebuild_raster, write_project_files, write_session_files
 from water_render import build_base_image, overlay_flow_arrows, overlay_grid, overlay_scale_bar, overlay_selection, overlay_vector_layer, render_viewport_image, render_viewport_layers
+from water_shortcuts import DEFAULT_SHORTCUTS, load_shortcuts, normalize_shortcut, save_shortcuts, shortcut_label
 from water_ui import FitTargetDialog, PaletteEditorDialog, ShortcutSettingsDialog, ToolTip
 
 
 RGBA = Tuple[int, int, int, int]
 
 
-class WaterCorrectionApp(tk.Tk):
+class WaterCorrectionApp(EditingHistoryMixin, tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("水系栅格数据可视化订正工具")
@@ -178,7 +180,7 @@ class WaterCorrectionApp(tk.Tk):
         self._autosave_data_path = self.user_data_dir / "water_session_autosave.npz"
         self._autosave_meta_path = self.user_data_dir / "water_session_autosave.json"
         self.palette_presets: Dict[str, Dict[str, object]] = {}
-        self.shortcuts: Dict[str, str] = {"brush": "b", "eraser": "e"}
+        self.shortcuts: Dict[str, str] = dict(DEFAULT_SHORTCUTS)
 
         self._build_ui()
         self.on_tool_changed()
@@ -534,34 +536,16 @@ class WaterCorrectionApp(tk.Tk):
             ToolTip(widget, text)
 
     def _load_shortcuts(self) -> None:
-        if not self._shortcuts_path.exists():
-            return
-        try:
-            payload = json.loads(self._shortcuts_path.read_text(encoding="utf-8"))
-        except Exception:
-            return
-        if not isinstance(payload, dict):
-            return
-        loaded = dict(self.shortcuts)
-        for tool in ("brush", "eraser"):
-            value = payload.get(tool)
-            key = self._normalize_shortcut(value) if isinstance(value, str) else ""
-            if key:
-                loaded[tool] = key
-        if loaded["brush"] != loaded["eraser"]:
-            self.shortcuts = loaded
+        self.shortcuts = load_shortcuts(self._shortcuts_path, self.shortcuts)
 
     def _save_shortcuts(self) -> None:
-        self._shortcuts_path.write_text(json.dumps(self.shortcuts, ensure_ascii=False, indent=2), encoding="utf-8")
+        save_shortcuts(self._shortcuts_path, self.shortcuts)
 
     def _normalize_shortcut(self, value: str) -> str:
-        key = value.strip().lower()
-        if len(key) != 1 or key.isspace():
-            return ""
-        return key
+        return normalize_shortcut(value)
 
     def _shortcut_label(self, tool: str) -> str:
-        return self.shortcuts.get(tool, "").upper()
+        return shortcut_label(self.shortcuts, tool)
 
     def _update_shortcut_hint(self) -> None:
         if hasattr(self, "vector_hint"):
@@ -684,7 +668,7 @@ class WaterCorrectionApp(tk.Tk):
             self.open_project(Path(path))
 
     def save_project(self, path: Path) -> None:
-        data_path = path.with_suffix(path.suffix + ".npz")
+        data_path = project_data_path(path)
         payload = {
             "version": "2.0",
             "workspace_dir": str(self.workspace_dir),
@@ -704,19 +688,20 @@ class WaterCorrectionApp(tk.Tk):
             "data_path": self._store_path(data_path),
             "palette_state": self._palette_state(),
         }
-        np.savez_compressed(
+        write_project_files(
+            path,
             data_path,
-            stream=np.array(self.stream_raster.data if self.stream_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
-            flow=np.array(self.flow_raster.data if self.flow_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
-            original_stream=np.array(self.original_stream_raster.data if self.original_stream_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
-            original_flow=np.array(self.original_flow_raster.data if self.original_flow_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
+            payload,
+            self.stream_raster,
+            self.flow_raster,
+            self.original_stream_raster,
+            self.original_flow_raster,
         )
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         self.info_var.set(f"已保存项目 {path.name}")
 
     def open_project(self, path: Path) -> None:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = read_project_payload(path)
         except Exception as exc:
             messagebox.showerror("打开项目失败", str(exc))
             return
@@ -725,16 +710,10 @@ class WaterCorrectionApp(tk.Tk):
         if isinstance(workspace, str) and workspace and Path(workspace).exists():
             self.workspace_dir = Path(workspace).resolve()
             self._save_workspace_dir(self.workspace_dir)
-        project_data = None
-        data_path_value = payload.get("data_path")
-        if isinstance(data_path_value, str) and data_path_value:
-            data_path = self._resolve_stored_path(data_path_value)
-            if data_path.exists():
-                try:
-                    with np.load(data_path, allow_pickle=False) as loaded:
-                        project_data = {name: np.array(loaded[name], dtype=np.int32) for name in loaded.files}
-                except Exception as exc:
-                    messagebox.showwarning("项目数据提示", f"项目数据文件读取失败，将尝试按原始路径加载。\n{exc}")
+        project = read_project_arrays(payload, self._resolve_stored_path)
+        project_data = project.arrays
+        if project.data_error is not None:
+            messagebox.showwarning("项目数据提示", f"项目数据文件读取失败，将尝试按原始路径加载。\n{project.data_error}")
         stream_path = payload.get("stream_path")
         if isinstance(stream_path, str) and stream_path:
             resolved = self._resolve_stored_path(stream_path)
@@ -1723,90 +1702,6 @@ class WaterCorrectionApp(tk.Tk):
         size = clamp(size, 1, 15)
         self.brush_size_var.set(size)
         return size // 2
-
-    def take_snapshot(self, silent: bool = False) -> None:
-        raster = self.get_active_raster()
-        if raster is None:
-            return
-        mode = self.active_mode()
-        tag = f"{mode}_{Path(raster.path).stem}_{len(self.snapshots[mode]) + 1}"
-        self.snapshots[mode].append((tag, raster.copy()))
-        if len(self.snapshots[mode]) > 50:
-            self.snapshots[mode] = self.snapshots[mode][-50:]
-        self.refresh_snapshot_list()
-        if not silent:
-            self.info_var.set(f"已创建快照 {tag}")
-
-    def refresh_snapshot_list(self) -> None:
-        self.snapshot_list.delete(0, tk.END)
-        for i, (name, _) in enumerate(self.snapshots[self.active_mode()]):
-            self.snapshot_list.insert(tk.END, f"{i + 1}. {name}")
-
-    def restore_selected_snapshot(self) -> None:
-        selection = self.snapshot_list.curselection()
-        if not selection:
-            return
-        idx = selection[0]
-        snapshots = self.snapshots[self.active_mode()]
-        if idx >= len(snapshots):
-            return
-        name, snap = snapshots[idx]
-        if self.active_mode() == "stream":
-            self.stream_raster = snap.copy()
-            self._clear_flow_skeleton_state()
-        else:
-            self.flow_raster = snap.copy()
-        self.histories[self.active_mode()].clear()
-        self.redo_stacks[self.active_mode()].clear()
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
-        self._invalidate_viewport_cache()
-        self.render(full=True)
-        self.info_var.set(f"已恢复快照 {name}")
-
-    def undo(self) -> None:
-        history = self.histories[self.active_mode()]
-        if not history:
-            return
-        batch = history.pop()
-        raster = self.get_active_raster()
-        if raster is None:
-            return
-        batch.undo(raster)
-        self.redo_stacks[self.active_mode()].append(batch)
-        self._full_render_requested = True
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
-        if batch.mode == "stream":
-            self._clear_flow_skeleton_state()
-        self._invalidate_viewport_cache()
-        self.render(full=True)
-        self.info_var.set(f"已撤销 {len(batch.ops)} 个像元修改")
-
-    def redo(self) -> None:
-        redo_stack = self.redo_stacks[self.active_mode()]
-        if not redo_stack:
-            return
-        batch = redo_stack.pop()
-        raster = self.get_active_raster()
-        if raster is None:
-            return
-        batch.apply(raster)
-        self.histories[self.active_mode()].append(batch)
-        self._full_render_requested = True
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
-        if batch.mode == "stream":
-            self._clear_flow_skeleton_state()
-        self._invalidate_viewport_cache()
-        self.render(full=True)
-        self.info_var.set(f"已重做 {len(batch.ops)} 个像元修改")
-
-    def log_batch(self, batch: ChangeBatch) -> None:
-        with self.log_path.open("a", encoding="utf-8", newline="") as f:
-            writer = csv.writer(f)
-            for op in batch.ops:
-                writer.writerow([batch.created_at, batch.mode, batch.tool, op.row, op.col, op.old, op.new, batch.note])
 
     def fit_content_to_view(self) -> None:
         dialog = FitTargetDialog(self, self.stream_raster is not None, self.flow_raster is not None, self.vector_layer is not None)
@@ -3007,23 +2902,10 @@ class WaterCorrectionApp(tk.Tk):
             self.palette_presets = {}
 
     def _snapshot_raster_payload(self, raster: Optional[RasterData]) -> Dict[str, object]:
-        if raster is None:
-            return {}
-        return {
-            "path": self._store_path(raster.path),
-            "header": raster.header.raw_lines,
-            "crs_text": raster.crs_text,
-            "shape": [raster.nrows, raster.ncols],
-        }
+        return raster_payload(raster, self._store_path)
 
     def _rebuild_raster_from_payload(self, payload: Dict[str, object], data: np.ndarray) -> Optional[RasterData]:
-        path_value = payload.get("path")
-        header_value = payload.get("header")
-        if not isinstance(path_value, str) or not isinstance(header_value, list):
-            return None
-        header = parse_asc_header_lines([str(line) for line in header_value])
-        crs_text = str(payload.get("crs_text", ""))
-        return RasterData(self._resolve_stored_path(path_value), header, data.astype(np.int32), crs_text)
+        return rebuild_raster(payload, data, self._resolve_stored_path)
 
     def _store_path(self, path: Path) -> str:
         try:
@@ -3060,24 +2942,25 @@ class WaterCorrectionApp(tk.Tk):
                 "shp_path": self._store_path(self.vector_layer.path) if self.vector_layer is not None else "",
                 "palette_state": self._palette_state(),
             }
-            np.savez_compressed(
+            write_session_files(
+                self._autosave_meta_path,
                 self._autosave_data_path,
-                stream=np.array(self.stream_raster.data if self.stream_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
-                flow=np.array(self.flow_raster.data if self.flow_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
-                original_stream=np.array(self.original_stream_raster.data if self.original_stream_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
-                original_flow=np.array(self.original_flow_raster.data if self.original_flow_raster is not None else np.empty((0, 0), dtype=np.int32), dtype=np.int32),
+                meta,
+                self.stream_raster,
+                self.flow_raster,
+                self.original_stream_raster,
+                self.original_flow_raster,
             )
-            self._autosave_meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as exc:
             self.info_var.set(f"自动保存失败: {exc}")
 
     def _restore_autosave(self) -> bool:
-        if not (self._autosave_data_path.exists() and self._autosave_meta_path.exists()):
-            return False
         try:
-            meta = json.loads(self._autosave_meta_path.read_text(encoding="utf-8"))
-            with np.load(self._autosave_data_path, allow_pickle=False) as loaded:
-                data = {name: np.array(loaded[name], dtype=np.int32) for name in loaded.files}
+            session = read_session_files(self._autosave_meta_path, self._autosave_data_path)
+            if session is None:
+                return False
+            meta = session.payload
+            data = session.arrays or {}
             stream_meta = meta.get("stream", {})
             if isinstance(stream_meta, dict) and "stream" in data and isinstance(data["stream"], np.ndarray) and data["stream"].size:
                 candidate = self._rebuild_raster_from_payload(stream_meta, data["stream"])
