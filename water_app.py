@@ -70,7 +70,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.tool_var = tk.StringVar(value="brush")
         self.direction_var = tk.StringVar(value="1 东")
         self.brush_size_var = tk.IntVar(value=1)
-        self.vector_tol_var = tk.DoubleVar(value=0.75)
+        self.vector_tol_var = tk.DoubleVar(value=0.2)
         self.zoom_var = tk.DoubleVar(value=1.0)
         self.show_grid_var = tk.BooleanVar(value=False)
         self.show_scale_var = tk.BooleanVar(value=True)
@@ -87,8 +87,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.flow_file_var = tk.StringVar(value="未加载")
         self.shp_var = tk.StringVar(value="未加载")
         self.coord_var = tk.StringVar(value="")
-        self.confluence_inner_radius_var = tk.IntVar(value=3)
-        self.confluence_outer_radius_var = tk.IntVar(value=8)
+        self.confluence_inner_radius_var = tk.IntVar(value=1)
+        self.confluence_outer_radius_var = tk.IntVar(value=2)
         self.river_flow_mode_var = tk.StringVar(value="平滑")
 
         self.stream_palette: Dict[str, RGBA] = {
@@ -332,7 +332,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.btn_shortcuts = ttk.Button(tool_box, text="快捷键设置", command=self.edit_shortcuts)
         self.btn_shortcuts.grid(row=2, column=2, columnspan=2, sticky="ew", padx=(8, 0), pady=(8, 0))
         ttk.Label(tool_box, text="矢量容差").grid(row=3, column=0, sticky="w", pady=(8, 0))
-        ttk.Spinbox(tool_box, from_=0.25, to=5.0, increment=0.25, width=6, textvariable=self.vector_tol_var).grid(row=3, column=1, sticky="w", pady=(8, 0))
+        ttk.Spinbox(tool_box, from_=0.0, to=5.0, increment=0.1, width=6, textvariable=self.vector_tol_var).grid(row=3, column=1, sticky="w", pady=(8, 0))
         self.btn_vector_batch = ttk.Button(tool_box, text="矢量批量修正", command=self.apply_vector_batch)
         self.btn_vector_batch.grid(row=3, column=2, columnspan=2, sticky="ew", padx=(8, 0), pady=(8, 0))
         self.vector_hint = ttk.Label(tool_box, text="河道模式可用矢量批量修正；流向模式左键改方向、右键选中像元")
