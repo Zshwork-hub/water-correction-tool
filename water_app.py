@@ -87,8 +87,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.flow_file_var = tk.StringVar(value="未加载")
         self.shp_var = tk.StringVar(value="未加载")
         self.coord_var = tk.StringVar(value="")
-        self.confluence_inner_radius_var = tk.IntVar(value=1)
-        self.confluence_outer_radius_var = tk.IntVar(value=2)
+        self.confluence_inner_radius_var = tk.IntVar(value=3)
+        self.confluence_outer_radius_var = tk.IntVar(value=4)
         self.river_flow_mode_var = tk.StringVar(value="平滑")
 
         self.stream_palette: Dict[str, RGBA] = {
