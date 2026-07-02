@@ -1,0 +1,51 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments / IDE
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+
+# Build outputs
+build/
+dist/
+*.spec.bak
+water_correction_tool_v1.spec
+
+# Runtime user/session data
+user_data/
+*.waterproj
+*.waterproj.npz
+water_correction_log.csv
+
+# Local test/output folders
+ceshi/
+
+# Root-level working notes copied into docs/
+/项目总说明.md
+/V2.0发布说明.md
+/V2.0审查与优化记录.md
+/记录.md
+
+# GIS data and large local datasets
+*.asc
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.sbn
+*.sbx
+*.qpj
+*.fix
+*.xml
+重庆/
+
+# OS files
+.DS_Store
+Thumbs.db
