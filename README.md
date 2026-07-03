@@ -37,13 +37,13 @@ pip install -r requirements.txt
 ## 打包
 
 ```powershell
-python -m PyInstaller water_correction_tool_v2.spec --noconfirm
+python -m PyInstaller water_correction_tool_v2_1.spec --noconfirm
 ```
 
 当前已验证的发布文件：
 
 ```text
-dist\水系订正工具_V2.0_修复版.exe
+dist\水系订正工具_V2.1.0.exe
 ```
 
 ## 项目保存与导出
