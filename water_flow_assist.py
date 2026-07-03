@@ -363,7 +363,7 @@ class FlowNetworkAssistant:
         if not seed_mask.any():
             return [], network, outer_radius, seed_count
 
-        ops = self._preview_confluence_from_seed_mask(seed_mask, inner_radius, outer_radius)
+        ops, _ = self._preview_confluence_from_seed_mask(seed_mask, inner_radius, outer_radius)
         return ops, network, outer_radius, seed_count
 
     def preview_locked_skeleton_confluence(
@@ -371,7 +371,7 @@ class FlowNetworkAssistant:
         locked_segments: List[Tuple[List[Cell], Cell]],
         inner_radius: int,
         outer_radius: int,
-    ) -> Tuple[List[Tuple[int, int, int]], int, int]:
+    ) -> Tuple[List[Tuple[int, int, int]], List[Tuple[int, int, int]], int, int]:
         inner_radius = max(1, clamp(int(inner_radius), 1, 30))
         outer_radius = max(inner_radius, clamp(int(outer_radius), inner_radius, 30))
         seed_mask = np.zeros((self.raster.nrows, self.raster.ncols), dtype=bool)
@@ -397,18 +397,18 @@ class FlowNetworkAssistant:
             if added:
                 seed_count += 1
         if not seed_mask.any():
-            return [], outer_radius, seed_count
-        ops = self._preview_confluence_from_seed_mask(seed_mask, inner_radius, outer_radius)
-        return ops, outer_radius, seed_count
+            return [], [], outer_radius, seed_count
+        ops, unchanged = self._preview_confluence_from_seed_mask(seed_mask, inner_radius, outer_radius)
+        return ops, unchanged, outer_radius, seed_count
 
     def preview_polygon_confluence(
         self,
         locked_segments: List[Tuple[List[Cell], Cell]],
         candidate_mask: np.ndarray,
         max_distance: int = 0,
-    ) -> Tuple[List[Tuple[int, int, int]], int, int]:
+    ) -> Tuple[List[Tuple[int, int, int]], List[Tuple[int, int, int]], int, int]:
         if candidate_mask.shape != (self.raster.nrows, self.raster.ncols):
-            return [], 0, 0
+            return [], [], 0, 0
         seed_mask = np.zeros((self.raster.nrows, self.raster.ncols), dtype=bool)
         seed_count = 0
         for cells, downstream_end in locked_segments:
@@ -434,9 +434,9 @@ class FlowNetworkAssistant:
         candidate_mask = self._limit_candidate_mask_by_distance(seed_mask, candidate_mask, max_distance)
         candidate_count = int(candidate_mask.sum())
         if not seed_mask.any() or candidate_count == 0:
-            return [], seed_count, candidate_count
-        ops = self._preview_polygon_confluence_from_masks(seed_mask, candidate_mask)
-        return ops, seed_count, candidate_count
+            return [], [], seed_count, candidate_count
+        ops, unchanged = self._preview_polygon_confluence_from_masks(seed_mask, candidate_mask)
+        return ops, unchanged, seed_count, candidate_count
 
     def _limit_candidate_mask_by_distance(
         self,
@@ -468,7 +468,7 @@ class FlowNetworkAssistant:
         seed_mask: np.ndarray,
         inner_radius: int,
         outer_radius: int,
-    ) -> List[Tuple[int, int, int]]:
+    ) -> Tuple[List[Tuple[int, int, int]], List[Tuple[int, int, int]]]:
         seed_rows, seed_cols = np.where(seed_mask)
         row0 = max(0, int(seed_rows.min()) - outer_radius - 1)
         row1 = min(self.raster.nrows, int(seed_rows.max()) + outer_radius + 2)
@@ -477,6 +477,7 @@ class FlowNetworkAssistant:
         local_seed_mask = seed_mask[row0:row1, col0:col1]
         dist, indices = ndimage.distance_transform_edt(~local_seed_mask, return_indices=True)
         ops: List[Tuple[int, int, int]] = []
+        unchanged: List[Tuple[int, int, int]] = []
         for row in range(row0, row1):
             local_row = row - row0
             for col in range(col0, col1):
@@ -506,16 +507,19 @@ class FlowNetworkAssistant:
                 if (target_row, target_col) == (row, col):
                     continue
                 code = direction_from_delta(row, col, target_row, target_col)
-                if code is None or self.raster.value_at(row, col) == code:
+                if code is None:
                     continue
-                ops.append((row, col, code))
-        return ops
+                if self.raster.value_at(row, col) == code:
+                    unchanged.append((row, col, code))
+                else:
+                    ops.append((row, col, code))
+        return ops, unchanged
 
     def _preview_polygon_confluence_from_masks(
         self,
         seed_mask: np.ndarray,
         candidate_mask: np.ndarray,
-    ) -> List[Tuple[int, int, int]]:
+    ) -> Tuple[List[Tuple[int, int, int]], List[Tuple[int, int, int]]]:
         active_mask = seed_mask | candidate_mask
         active_rows, active_cols = np.where(active_mask)
         if active_rows.size == 0:
@@ -529,6 +533,7 @@ class FlowNetworkAssistant:
         local_allowed_mask = local_seed_mask | local_candidate_mask
         dist, indices = ndimage.distance_transform_edt(~local_seed_mask, return_indices=True)
         ops: List[Tuple[int, int, int]] = []
+        unchanged: List[Tuple[int, int, int]] = []
         candidate_rows, candidate_cols = np.where(local_candidate_mask)
         for local_row, local_col in zip(candidate_rows.tolist(), candidate_cols.tolist()):
             row = local_row + row0
@@ -548,10 +553,13 @@ class FlowNetworkAssistant:
             if (target_row, target_col) == (row, col):
                 continue
             code = direction_from_delta(row, col, target_row, target_col)
-            if code is None or self.raster.value_at(row, col) == code:
+            if code is None:
                 continue
-            ops.append((row, col, code))
-        return ops
+            if self.raster.value_at(row, col) == code:
+                unchanged.append((row, col, code))
+            else:
+                ops.append((row, col, code))
+        return ops, unchanged
 
     def _polygon_target_cell(
         self,

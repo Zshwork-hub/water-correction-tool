@@ -129,6 +129,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.flow_assist_outlets: List[Tuple[int, int]] = []
         self.flow_assist_nodes: List[Tuple[int, int]] = []
         self.flow_preview_ops: List[Tuple[int, int, int]] = []
+        self.flow_preview_unchanged_ops: List[Tuple[int, int, int]] = []
         self.flow_preview_kind: str = ""
         self.flow_preview_segment_key: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None
 
@@ -571,7 +572,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         if self.flow_preview_kind == "river_skeleton":
             preview_text = f"河道流向预览 {len(self.flow_preview_ops)} 个像元"
         elif self.flow_preview_kind == "confluence":
-            preview_text = f"周边汇流预览 {len(self.flow_preview_ops)} 个像元"
+            preview_text = f"周边汇流预览 需修改 {len(self.flow_preview_ops)} / 已一致 {len(self.flow_preview_unchanged_ops)}"
         elif self.flow_preview_ops:
             preview_text = f"流向预览 {len(self.flow_preview_ops)} 个像元"
         else:
@@ -859,6 +860,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.flow_assist_outlets = []
         self.flow_assist_nodes = []
         self.flow_preview_ops = []
+        self.flow_preview_unchanged_ops = []
         self.flow_preview_kind = ""
         self.flow_preview_segment_key = None
         self.histories["flow"].clear()
@@ -982,26 +984,27 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
     def _refresh_flow_controls(self) -> None:
         has_flow_data = self.stream_raster is not None and self.flow_raster is not None
         locked_ready = bool(self.confirmed_flow_segments)
-        preview_ready = bool(self.flow_preview_ops)
+        apply_ready = bool(self.flow_preview_kind and self.flow_preview_ops)
+        preview_ready = bool(self.flow_preview_kind and (self.flow_preview_ops or self.flow_preview_unchanged_ops))
         apply_text = self._flow_apply_button_text()
 
         def state(enabled: bool) -> str:
             return "normal" if enabled else "disabled"
 
         self.btn_flow_preview.configure(state=state(locked_ready))
-        self.btn_flow_apply.configure(state=state(preview_ready), text=apply_text)
+        self.btn_flow_apply.configure(state=state(apply_ready), text=apply_text)
         self.btn_pick_flow_segment.configure(state=state(has_flow_data))
         self.btn_set_flow_outlet.configure(state=state(locked_ready and self.selected_flow_cell is not None))
         self.btn_preview_river_flow.configure(state=state(locked_ready and self.flow_skeleton_outlet is not None))
         self.btn_set_downstream.configure(state=state(locked_ready))
         self.btn_add_locked_cell.configure(state=state(has_flow_data and self.selected_flow_cell is not None))
         self.btn_remove_locked_region.configure(state=state(locked_ready and (self.selected_flow_cell is not None or self.selected_flow_region is not None)))
-        self.btn_reverse_segment.configure(state=state(preview_ready), text=apply_text)
+        self.btn_reverse_segment.configure(state=state(apply_ready), text=apply_text)
         self.btn_preview_segment.configure(state=state(preview_ready))
         self.btn_confirm_segment.configure(state=state(locked_ready))
         self.btn_preview_confluence.configure(state=state(locked_ready))
         self.btn_clear_flow_marks.configure(state=state(locked_ready))
-        self.btn_apply_flow_preview.configure(state=state(preview_ready), text=apply_text)
+        self.btn_apply_flow_preview.configure(state=state(apply_ready), text=apply_text)
         self.btn_clear_flow_preview.configure(state=state(preview_ready))
         self.update_mode_status()
 
@@ -1027,6 +1030,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
     def on_confluence_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
         if self.flow_preview_kind == "confluence":
             self.flow_preview_ops = []
+            self.flow_preview_unchanged_ops = []
             self.flow_preview_kind = ""
             self.flow_preview_segment_key = None
             self.render(full=True)
@@ -1474,6 +1478,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
     def _update_flow_assist_text(self) -> None:
         preview = len(self.flow_preview_ops)
+        unchanged = len(self.flow_preview_unchanged_ops)
         locked_cells = sum(len(cells) for cells in self.confirmed_flow_segment_cells.values())
         if locked_cells:
             selected = f"已锁定河道 {len(self.confirmed_flow_segments)} 组 / {locked_cells} 像元"
@@ -1483,7 +1488,11 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         preview_label = "河道预览" if self.flow_preview_kind == "river_skeleton" else "周边预览"
         max_distance = int(self.confluence_max_distance_var.get())
         distance_text = "不限距" if max_distance <= 0 else f"最大距 {max_distance}"
-        self.flow_assist_var.set(f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {distance_text}  {preview_label} {preview} 个像元")
+        if self.flow_preview_kind == "confluence":
+            preview_detail = f"{preview_label} 需修改 {preview} / 已一致 {unchanged}"
+        else:
+            preview_detail = f"{preview_label} {preview} 个像元"
+        self.flow_assist_var.set(f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {distance_text}  {preview_detail}")
 
     def set_flow_skeleton_outlet(self) -> None:
         if not self.confirmed_flow_segment_cells:
@@ -1682,7 +1691,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 if not ok:
                     return
             max_distance = max(0, int(self.confluence_max_distance_var.get()))
-            ops, seed_edge_count, candidate_count = assistant.preview_polygon_confluence(locked_segments, candidate_mask, max_distance)
+            ops, unchanged_ops, seed_edge_count, candidate_count = assistant.preview_polygon_confluence(locked_segments, candidate_mask, max_distance)
             if seed_edge_count == 0:
                 messagebox.showinfo("提示", "没有找到已锁定河道。")
                 return
@@ -1691,20 +1700,20 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 self.info_var.set("范围SHP汇流未生成预览：最大距过滤后候选像元为 0")
                 self._refresh_flow_controls()
                 return
-            self._set_flow_preview(ops, "范围SHP汇流", "confluence", None)
+            self._set_flow_preview(ops, "范围SHP汇流", "confluence", None, unchanged_ops)
             distance_text = "不限距离" if max_distance <= 0 else f"最大距离 {max_distance} 像元"
             if not self.flow_preview_ops:
                 self.info_var.set(
-                    f"范围SHP汇流没有生成可应用预览：{distance_text}，候选像元 {candidate_count} 个；当前方向可能已一致或没有更近的相邻路径。"
+                    f"范围SHP汇流没有生成可应用预览：{distance_text}，候选像元 {candidate_count} 个，已一致 {len(self.flow_preview_unchanged_ops)} 个。"
                 )
                 self._refresh_flow_controls()
                 return
             self.info_var.set(
-                f"范围SHP汇流预览完成，锁定河道 {seed_edge_count} 组，{distance_text}，候选像元 {candidate_count} 个，方向建议 {len(self.flow_preview_ops)} 个"
+                f"范围SHP汇流预览完成，锁定河道 {seed_edge_count} 组，{distance_text}，候选像元 {candidate_count} 个，需修改 {len(self.flow_preview_ops)} 个，已一致 {len(self.flow_preview_unchanged_ops)} 个"
             )
             self._refresh_flow_controls()
             return
-        ops, radius, seed_edge_count = assistant.preview_locked_skeleton_confluence(
+        ops, unchanged_ops, radius, seed_edge_count = assistant.preview_locked_skeleton_confluence(
             locked_segments,
             int(self.confluence_inner_radius_var.get()),
             int(self.confluence_outer_radius_var.get()),
@@ -1712,9 +1721,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         if seed_edge_count == 0:
             messagebox.showinfo("提示", "没有找到已锁定河道。")
             return
-        self._set_flow_preview(ops, "周边汇流", "confluence", None)
+        self._set_flow_preview(ops, "周边汇流", "confluence", None, unchanged_ops)
         self.info_var.set(
-            f"周边汇流预览完成，锁定河道 {seed_edge_count} 组，远带 {radius} 像元，方向建议 {len(self.flow_preview_ops)} 个"
+            f"周边汇流预览完成，锁定河道 {seed_edge_count} 组，远带 {radius} 像元，需修改 {len(self.flow_preview_ops)} 个，已一致 {len(self.flow_preview_unchanged_ops)} 个"
         )
         self._refresh_flow_controls()
 
@@ -1724,21 +1733,36 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         label: str,
         kind: str = "",
         segment_key: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None,
+        unchanged_ops: Optional[List[Tuple[int, int, int]]] = None,
     ) -> None:
         unique: Dict[Tuple[int, int], int] = {}
         for row, col, code in ops:
             if kind == "confluence" and self._is_current_stream_cell(row, col):
                 continue
             unique[(row, col)] = code
+        unchanged_unique: Dict[Tuple[int, int], int] = {}
+        for row, col, code in unchanged_ops or []:
+            if (row, col) in unique:
+                continue
+            if kind == "confluence" and self._is_current_stream_cell(row, col):
+                continue
+            unchanged_unique[(row, col)] = code
         self.flow_preview_ops = [(row, col, code) for (row, col), code in unique.items()]
+        self.flow_preview_unchanged_ops = [(row, col, code) for (row, col), code in unchanged_unique.items()]
         self.flow_preview_kind = kind
         self.flow_preview_segment_key = segment_key
         self._update_flow_assist_text()
-        if not self.flow_preview_ops:
-            self.info_var.set(f"{label}: 没有需要修改的像元")
+        if not self.flow_preview_ops and not self.flow_preview_unchanged_ops:
+            self.info_var.set(f"{label}: 没有可预览的像元")
+        elif not self.flow_preview_ops:
+            self._refresh_flow_controls()
+            self.info_var.set(f"{label}: 没有需要修改的像元，已一致 {len(self.flow_preview_unchanged_ops)} 个")
+            self.render(full=True)
+            return
         else:
             self._refresh_flow_controls()
-            self.info_var.set(f"{label}: 显示 {len(self.flow_preview_ops)} 个方向箭头，点击“{self._flow_apply_button_text()}”写入有变化的像元")
+            unchanged_text = f"，已一致 {len(self.flow_preview_unchanged_ops)} 个" if self.flow_preview_unchanged_ops else ""
+            self.info_var.set(f"{label}: 需修改 {len(self.flow_preview_ops)} 个{unchanged_text}，点击“{self._flow_apply_button_text()}”写入橙色像元")
             self.render(full=True)
             return
         self._refresh_flow_controls()
@@ -1766,6 +1790,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.confirmed_flow_segments[self.selected_flow_segment.edge_key] = downstream
             self.confirmed_flow_segment_cells[self.selected_flow_segment.edge_key] = list(self.selected_flow_segment.cells)
         self.flow_preview_ops = []
+        self.flow_preview_unchanged_ops = []
         self.flow_preview_kind = ""
         self.flow_preview_segment_key = None
         self._update_flow_assist_text()
@@ -1835,6 +1860,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
     def clear_flow_preview(self) -> None:
         self.flow_preview_ops = []
+        self.flow_preview_unchanged_ops = []
         self.flow_preview_kind = ""
         self.flow_preview_segment_key = None
         self._update_flow_assist_text()
@@ -2548,25 +2574,67 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         return Image.alpha_composite(image, overlay)
 
     def _draw_flow_preview_overlay(self, overlay: Image.Image, raster: RasterData, zoom: float) -> None:
-        if not self.flow_preview_ops:
+        if not self.flow_preview_kind or (not self.flow_preview_ops and not self.flow_preview_unchanged_ops):
             return
         draw = ImageDraw.Draw(overlay)
+        for row, col, code in self.flow_preview_unchanged_ops:
+            self._draw_flow_preview_cell(
+                draw,
+                overlay,
+                raster,
+                zoom,
+                row,
+                col,
+                code,
+                fill=(40, 150, 220, 70),
+                outline=(35, 120, 180, 190),
+                arrow=(25, 95, 150, 210),
+                width_scale=9.0,
+            )
         for row, col, code in self.flow_preview_ops:
-            if not (0 <= row < raster.nrows and 0 <= col < raster.ncols):
-                continue
-            x0 = int(math.floor(col * zoom - self._view_x))
-            y0 = int(math.floor(row * zoom - self._view_y))
-            x1 = max(x0 + 1, int(math.ceil((col + 1) * zoom - self._view_x)))
-            y1 = max(y0 + 1, int(math.ceil((row + 1) * zoom - self._view_y)))
-            if x1 < 0 or y1 < 0 or x0 >= overlay.size[0] or y0 >= overlay.size[1]:
-                continue
-            draw.rectangle(
-                (x0, y0, x1 - 1, y1 - 1),
+            self._draw_flow_preview_cell(
+                draw,
+                overlay,
+                raster,
+                zoom,
+                row,
+                col,
+                code,
                 fill=(255, 205, 45, 115),
                 outline=(230, 95, 0, 255),
-                width=max(1, int(round(max(1.0, zoom / 7.0)))),
+                arrow=(165, 35, 0, 255),
+                width_scale=7.0,
             )
-            self._draw_preview_direction_arrow(draw, row, col, code, zoom)
+
+    def _draw_flow_preview_cell(
+        self,
+        draw: ImageDraw.ImageDraw,
+        overlay: Image.Image,
+        raster: RasterData,
+        zoom: float,
+        row: int,
+        col: int,
+        code: int,
+        fill: RGBA,
+        outline: RGBA,
+        arrow: RGBA,
+        width_scale: float,
+    ) -> None:
+        if not (0 <= row < raster.nrows and 0 <= col < raster.ncols):
+            return
+        x0 = int(math.floor(col * zoom - self._view_x))
+        y0 = int(math.floor(row * zoom - self._view_y))
+        x1 = max(x0 + 1, int(math.ceil((col + 1) * zoom - self._view_x)))
+        y1 = max(y0 + 1, int(math.ceil((row + 1) * zoom - self._view_y)))
+        if x1 < 0 or y1 < 0 or x0 >= overlay.size[0] or y0 >= overlay.size[1]:
+            return
+        draw.rectangle(
+            (x0, y0, x1 - 1, y1 - 1),
+            fill=fill,
+            outline=outline,
+            width=max(1, int(round(max(1.0, zoom / width_scale)))),
+        )
+        self._draw_preview_direction_arrow(draw, row, col, code, zoom, arrow)
 
     def _draw_preview_direction_arrow(
         self,
@@ -2575,6 +2643,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         col: int,
         code: int,
         zoom: float,
+        color: RGBA = (165, 35, 0, 255),
     ) -> None:
         offset = DIR_OFFSETS.get(int(code))
         if offset is None:
@@ -2585,7 +2654,6 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         length = max(5.0, 0.62 * zoom)
         ex = cx + dc * length
         ey = cy + dr * length
-        color = (165, 35, 0, 255)
         width = max(3, int(round(max(1.0, zoom / 6.0))))
         head = max(3.0, 0.24 * zoom)
         draw.line((cx, cy, ex, ey), fill=color, width=width)
