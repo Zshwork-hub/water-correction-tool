@@ -52,11 +52,20 @@ class PaletteMixin:
         self.vector_color = dialog.result["矢量线"]
         self.render(full=True)
 
+    def pick_confluence_polygon_color(self) -> None:
+        dialog = PaletteEditorDialog(self, "汇流范围颜色", [("范围边界", self.confluence_polygon_color)])
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        self.confluence_polygon_color = dialog.result["范围边界"]
+        self.render(full=True)
+
     def _palette_state(self) -> Dict[str, object]:
         return {
             "stream_palette": {k: list(v) for k, v in self.stream_palette.items()},
             "flow_palette": {str(k): list(v) for k, v in self.flow_palette.items()},
             "vector_color": list(self.vector_color),
+            "confluence_polygon_color": list(self.confluence_polygon_color),
             "show_grid": self.show_grid_var.get(),
             "show_scale": self.show_scale_var.get(),
             "show_flow_arrows": self.show_flow_arrows_var.get(),
@@ -85,6 +94,9 @@ class PaletteMixin:
         vector_color = state.get("vector_color")
         if isinstance(vector_color, list) and len(vector_color) == 4:
             self.vector_color = tuple(int(v) for v in vector_color)
+        confluence_polygon_color = state.get("confluence_polygon_color")
+        if isinstance(confluence_polygon_color, list) and len(confluence_polygon_color) == 4:
+            self.confluence_polygon_color = tuple(int(v) for v in confluence_polygon_color)
         self.show_grid_var.set(bool(state.get("show_grid", self.show_grid_var.get())))
         self.show_scale_var.set(bool(state.get("show_scale", self.show_scale_var.get())))
         self.show_flow_arrows_var.set(bool(state.get("show_flow_arrows", self.show_flow_arrows_var.get())))

@@ -95,6 +95,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.coord_var = tk.StringVar(value="")
         self.confluence_inner_radius_var = tk.IntVar(value=3)
         self.confluence_outer_radius_var = tk.IntVar(value=4)
+        self.confluence_mode_var = tk.StringVar(value="近远带")
         self.river_flow_mode_var = tk.StringVar(value="平滑")
 
         self.stream_palette: Dict[str, RGBA] = {
@@ -378,6 +379,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.btn_flow_palette.grid(row=1, column=1, sticky="ew", padx=(0, 4), pady=(8, 0))
         self.btn_vector_color = ttk.Button(display_box, text="矢量颜色", command=self.pick_vector_color)
         self.btn_vector_color.grid(row=1, column=2, sticky="ew", padx=(0, 4), pady=(8, 0))
+        self.btn_confluence_polygon_color = ttk.Button(display_box, text="范围颜色", command=self.pick_confluence_polygon_color)
+        self.btn_confluence_polygon_color.grid(row=1, column=3, sticky="ew", pady=(8, 0))
         self.btn_save_preset = ttk.Button(display_box, text="保存预设", command=self.save_palette_preset_dialog)
         self.btn_save_preset.grid(row=2, column=0, sticky="ew", padx=(0, 4), pady=(8, 0))
         self.btn_load_preset = ttk.Button(display_box, text="加载预设", command=self.load_palette_preset_dialog)
@@ -428,13 +431,16 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
         confluence_box = ttk.LabelFrame(flow_assist_box, text="3 周边汇流", padding=6)
         confluence_box.pack(fill="x", pady=(0, 6))
-        ttk.Label(confluence_box, text="近带").grid(row=0, column=0, sticky="w")
-        ttk.Spinbox(confluence_box, from_=1, to=30, increment=1, width=6, textvariable=self.confluence_inner_radius_var).grid(row=0, column=1, sticky="w", padx=(0, 8))
-        ttk.Label(confluence_box, text="远带").grid(row=0, column=2, sticky="w")
-        ttk.Spinbox(confluence_box, from_=1, to=30, increment=1, width=6, textvariable=self.confluence_outer_radius_var).grid(row=0, column=3, sticky="w", padx=(0, 8))
+        ttk.Label(confluence_box, text="模式").grid(row=0, column=0, sticky="w")
+        self.confluence_mode_box = ttk.Combobox(confluence_box, state="readonly", values=["近远带", "范围SHP"], textvariable=self.confluence_mode_var, width=8)
+        self.confluence_mode_box.grid(row=0, column=1, sticky="w", padx=(0, 8))
+        ttk.Label(confluence_box, text="近带").grid(row=0, column=2, sticky="w")
+        ttk.Spinbox(confluence_box, from_=1, to=30, increment=1, width=5, textvariable=self.confluence_inner_radius_var).grid(row=0, column=3, sticky="w", padx=(0, 8))
+        ttk.Label(confluence_box, text="远带").grid(row=0, column=4, sticky="w")
+        ttk.Spinbox(confluence_box, from_=1, to=30, increment=1, width=5, textvariable=self.confluence_outer_radius_var).grid(row=0, column=5, sticky="w", padx=(0, 8))
         self.btn_set_downstream = ttk.Button(confluence_box, text="预览周边汇流", command=self.preview_confirmed_confluence)
-        self.btn_set_downstream.grid(row=0, column=4, sticky="ew")
-        confluence_box.columnconfigure(4, weight=1)
+        self.btn_set_downstream.grid(row=1, column=0, columnspan=6, sticky="ew", pady=(6, 0))
+        confluence_box.columnconfigure(5, weight=1)
 
         action_box = ttk.LabelFrame(flow_assist_box, text="4 应用与清理", padding=6)
         action_box.pack(fill="x", pady=(0, 6))
@@ -493,6 +499,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.btn_set_flow_outlet: "把当前右键选中的锁定河道像元设为本段下游出口。",
             self.btn_preview_river_flow: "按已设出口预览锁定河道本体的 D8 流向，出口像元保留原方向。",
             self.btn_set_downstream: "基于已锁定河道，预览周边非河道像元向河道汇流的方向。",
+            self.confluence_mode_box: "选择按近远带缓冲汇流，或按汇流范围 SHP 面内汇流。",
             self.btn_add_locked_cell: "把当前右键单点选中的 Stream=1 河道像元补充加入锁定。",
             self.btn_remove_locked_region: "只清除当前右键单点或拖框范围内的已锁定河道，其他锁定保留。",
             self.btn_reverse_segment: "将当前橙色预览结果写入流向栅格；河道像元不会被周边汇流覆盖。",
@@ -508,6 +515,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.btn_stream_palette: "修改河道模式配色。",
             self.btn_flow_palette: "修改流向模式配色。",
             self.btn_vector_color: "修改矢量叠加颜色。",
+            self.btn_confluence_polygon_color: "修改汇流范围面 SHP 边界颜色。",
             self.btn_save_preset: "保存当前配色和显示设置。",
             self.btn_load_preset: "加载已保存预设。",
             self.chk_grid: "显示或隐藏网格。",
@@ -673,6 +681,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             "brush_size": int(self.brush_size_var.get()),
             "vector_tol": float(self.vector_tol_var.get()),
             "river_flow_mode": self.river_flow_mode_var.get(),
+            "confluence_mode": self.confluence_mode_var.get(),
             "zoom": float(self.zoom_var.get()),
             "confluence_inner_radius": int(self.confluence_inner_radius_var.get()),
             "confluence_outer_radius": int(self.confluence_outer_radius_var.get()),
@@ -762,6 +771,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         river_flow_mode = str(payload.get("river_flow_mode", self.river_flow_mode_var.get()))
         if river_flow_mode in {"平滑", "稳健"}:
             self.river_flow_mode_var.set(river_flow_mode)
+        confluence_mode = str(payload.get("confluence_mode", self.confluence_mode_var.get()))
+        if confluence_mode in {"近远带", "范围SHP"}:
+            self.confluence_mode_var.set(confluence_mode)
         self.zoom_var.set(float(payload.get("zoom", self.zoom_var.get())))
         self.confluence_inner_radius_var.set(int(payload.get("confluence_inner_radius", self.confluence_inner_radius_var.get())))
         self.confluence_outer_radius_var.set(int(payload.get("confluence_outer_radius", self.confluence_outer_radius_var.get())))
@@ -1258,6 +1270,39 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 inside.append((row, col))
         return inside
 
+    def _confluence_polygon_candidate_mask(self) -> np.ndarray:
+        flow = self.flow_raster
+        if flow is None:
+            return np.zeros((0, 0), dtype=bool)
+        rings = self._confluence_polygon_rings_for_raster(flow)
+        mask = np.zeros((flow.nrows, flow.ncols), dtype=bool)
+        bounds = rings_bounds(rings)
+        if bounds is None:
+            return mask
+        min_x, min_y, max_x, max_y = bounds
+        rows: List[float] = []
+        cols: List[float] = []
+        for x, y in ((min_x, min_y), (min_x, max_y), (max_x, min_y), (max_x, max_y)):
+            row, col = flow.world_to_rc(x, y)
+            rows.append(row)
+            cols.append(col)
+        row0 = max(0, int(math.floor(min(rows))) - 1)
+        row1 = min(flow.nrows, int(math.ceil(max(rows))) + 1)
+        col0 = max(0, int(math.floor(min(cols))) - 1)
+        col1 = min(flow.ncols, int(math.ceil(max(cols))) + 1)
+        stream = self.stream_raster
+        has_stream = stream is not None and stream.nrows == flow.nrows and stream.ncols == flow.ncols
+        for row in range(row0, row1):
+            for col in range(col0, col1):
+                if int(flow.data[row, col]) == NODATA:
+                    continue
+                if has_stream and int(stream.data[row, col]) == STREAM_VALUE:
+                    continue
+                x, y = flow.rc_to_world(row, col)
+                if point_in_any_ring(x, y, rings):
+                    mask[row, col] = True
+        return mask
+
     def _collect_visible_stream_component(
         self,
         anchor: Tuple[int, int],
@@ -1390,7 +1435,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             selected = "未锁定河道"
         outlet = f"出口 {self.flow_skeleton_outlet}" if self.flow_skeleton_outlet is not None else "未设出口"
         preview_label = "河道预览" if self.flow_preview_kind == "river_skeleton" else "周边预览"
-        self.flow_assist_var.set(f"{selected}  {outlet}  {preview_label} {preview} 个像元")
+        self.flow_assist_var.set(f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {preview_label} {preview} 个像元")
 
     def set_flow_skeleton_outlet(self) -> None:
         if not self.confirmed_flow_segment_cells:
@@ -1575,6 +1620,29 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             for edge_key, downstream in self.confirmed_flow_segments.items()
             if edge_key in self.confirmed_flow_segment_cells
         ]
+        if self.confluence_mode_var.get() == "范围SHP":
+            if self.confluence_polygon_layer is None:
+                messagebox.showwarning("提示", "请先加载汇流范围面SHP，或将汇流模式切换为近远带。")
+                return
+            candidate_mask = self._confluence_polygon_candidate_mask()
+            candidate_count = int(candidate_mask.sum())
+            if candidate_count == 0:
+                messagebox.showinfo("提示", "汇流范围内没有可预览的非河道有效流向像元。")
+                return
+            if candidate_count > 200000:
+                ok = messagebox.askyesno("确认预览", f"汇流范围内有 {candidate_count} 个候选像元，预览可能需要一些时间。是否继续？")
+                if not ok:
+                    return
+            ops, seed_edge_count, candidate_count = assistant.preview_polygon_confluence(locked_segments, candidate_mask)
+            if seed_edge_count == 0:
+                messagebox.showinfo("提示", "没有找到已锁定河道。")
+                return
+            self._set_flow_preview(ops, "范围SHP汇流", "confluence", None)
+            self.info_var.set(
+                f"范围SHP汇流预览完成，锁定河道 {seed_edge_count} 组，候选像元 {candidate_count} 个，方向建议 {len(self.flow_preview_ops)} 个"
+            )
+            self._refresh_flow_controls()
+            return
         ops, radius, seed_edge_count = assistant.preview_locked_skeleton_confluence(
             locked_segments,
             int(self.confluence_inner_radius_var.get()),
@@ -2731,6 +2799,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 "brush_size": int(self.brush_size_var.get()),
                 "vector_tol": float(self.vector_tol_var.get()),
                 "river_flow_mode": self.river_flow_mode_var.get(),
+                "confluence_mode": self.confluence_mode_var.get(),
                 "zoom": float(self.zoom_var.get()),
                 "confluence_inner_radius": int(self.confluence_inner_radius_var.get()),
                 "confluence_outer_radius": int(self.confluence_outer_radius_var.get()),
@@ -2798,6 +2867,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             river_flow_mode = str(meta.get("river_flow_mode", self.river_flow_mode_var.get()))
             if river_flow_mode in {"平滑", "稳健"}:
                 self.river_flow_mode_var.set(river_flow_mode)
+            confluence_mode = str(meta.get("confluence_mode", self.confluence_mode_var.get()))
+            if confluence_mode in {"近远带", "范围SHP"}:
+                self.confluence_mode_var.set(confluence_mode)
             self.zoom_var.set(float(meta.get("zoom", self.zoom_var.get())))
             self.confluence_inner_radius_var.set(int(meta.get("confluence_inner_radius", self.confluence_inner_radius_var.get())))
             self.confluence_outer_radius_var.set(int(meta.get("confluence_outer_radius", self.confluence_outer_radius_var.get())))

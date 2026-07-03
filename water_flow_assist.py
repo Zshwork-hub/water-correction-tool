@@ -401,6 +401,41 @@ class FlowNetworkAssistant:
         ops = self._preview_confluence_from_seed_mask(seed_mask, inner_radius, outer_radius)
         return ops, outer_radius, seed_count
 
+    def preview_polygon_confluence(
+        self,
+        locked_segments: List[Tuple[List[Cell], Cell]],
+        candidate_mask: np.ndarray,
+    ) -> Tuple[List[Tuple[int, int, int]], int, int]:
+        if candidate_mask.shape != (self.raster.nrows, self.raster.ncols):
+            return [], 0, 0
+        seed_mask = np.zeros((self.raster.nrows, self.raster.ncols), dtype=bool)
+        seed_count = 0
+        for cells, downstream_end in locked_segments:
+            if len(cells) < 1:
+                continue
+            segment = FlowSegment(
+                edge_key=tuple(sorted((cells[0], cells[-1]))),
+                start=cells[0],
+                end=cells[-1],
+                cells=list(cells),
+                nearest_cell=downstream_end,
+                nearest_index=0,
+                nearest_distance2=0.0,
+            )
+            oriented = self.oriented_segment_cells(segment, downstream_end) if len(cells) >= 2 else list(cells)
+            added = False
+            for row, col in oriented:
+                if 0 <= row < self.raster.nrows and 0 <= col < self.raster.ncols:
+                    seed_mask[row, col] = True
+                    added = True
+            if added:
+                seed_count += 1
+        candidate_count = int(candidate_mask.sum())
+        if not seed_mask.any() or candidate_count == 0:
+            return [], seed_count, candidate_count
+        ops = self._preview_polygon_confluence_from_masks(seed_mask, candidate_mask)
+        return ops, seed_count, candidate_count
+
     def _preview_confluence_from_seed_mask(
         self,
         seed_mask: np.ndarray,
@@ -448,6 +483,83 @@ class FlowNetworkAssistant:
                     continue
                 ops.append((row, col, code))
         return ops
+
+    def _preview_polygon_confluence_from_masks(
+        self,
+        seed_mask: np.ndarray,
+        candidate_mask: np.ndarray,
+    ) -> List[Tuple[int, int, int]]:
+        active_mask = seed_mask | candidate_mask
+        active_rows, active_cols = np.where(active_mask)
+        if active_rows.size == 0:
+            return []
+        row0 = max(0, int(active_rows.min()) - 1)
+        row1 = min(self.raster.nrows, int(active_rows.max()) + 2)
+        col0 = max(0, int(active_cols.min()) - 1)
+        col1 = min(self.raster.ncols, int(active_cols.max()) + 2)
+        local_seed_mask = seed_mask[row0:row1, col0:col1]
+        local_candidate_mask = candidate_mask[row0:row1, col0:col1]
+        local_allowed_mask = local_seed_mask | local_candidate_mask
+        dist, indices = ndimage.distance_transform_edt(~local_seed_mask, return_indices=True)
+        ops: List[Tuple[int, int, int]] = []
+        candidate_rows, candidate_cols = np.where(local_candidate_mask)
+        for local_row, local_col in zip(candidate_rows.tolist(), candidate_cols.tolist()):
+            row = local_row + row0
+            col = local_col + col0
+            target_local_row, target_local_col = self._polygon_target_cell(
+                local_row,
+                local_col,
+                dist,
+                indices,
+                local_seed_mask,
+                local_allowed_mask,
+            )
+            if target_local_row is None or target_local_col is None:
+                continue
+            target_row = target_local_row + row0
+            target_col = target_local_col + col0
+            if (target_row, target_col) == (row, col):
+                continue
+            code = direction_from_delta(row, col, target_row, target_col)
+            if code is None or self.raster.value_at(row, col) == code:
+                continue
+            ops.append((row, col, code))
+        return ops
+
+    def _polygon_target_cell(
+        self,
+        row: int,
+        col: int,
+        dist: np.ndarray,
+        indices: np.ndarray,
+        seed_mask: np.ndarray,
+        allowed_mask: np.ndarray,
+    ) -> Tuple[Optional[int], Optional[int]]:
+        current_dist = float(dist[row, col])
+        if current_dist <= 0.0:
+            return None, None
+        if current_dist <= 1.5:
+            seed_row = int(indices[0, row, col])
+            seed_col = int(indices[1, row, col])
+            if seed_mask[seed_row, seed_col]:
+                return seed_row, seed_col
+        best_cell: Optional[Cell] = None
+        best_score = current_dist
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                if dr == 0 and dc == 0:
+                    continue
+                nr = row + dr
+                nc = col + dc
+                if not (0 <= nr < seed_mask.shape[0] and 0 <= nc < seed_mask.shape[1]):
+                    continue
+                if not allowed_mask[nr, nc]:
+                    continue
+                neighbor_dist = float(dist[nr, nc])
+                if neighbor_dist < best_score - 1e-6:
+                    best_score = neighbor_dist
+                    best_cell = (nr, nc)
+        return best_cell if best_cell is not None else (None, None)
 
     def _buffer_target_cell(
         self,
