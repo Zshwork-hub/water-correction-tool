@@ -570,7 +570,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         tool_text = "画笔" if self.tool_var.get() == "brush" else "橡皮擦" if self.tool_var.get() == "eraser" else self.tool_var.get()
         locked_count = len(self._locked_flow_cells_set()) if hasattr(self, "confirmed_flow_segment_cells") else 0
         if self.flow_preview_kind == "river_skeleton":
-            preview_text = f"河道流向预览 {len(self.flow_preview_ops)} 个像元"
+            preview_text = f"河道流向预览 需修改 {len(self.flow_preview_ops)} / 已一致 {len(self.flow_preview_unchanged_ops)}"
         elif self.flow_preview_kind == "confluence":
             preview_text = f"周边汇流预览 需修改 {len(self.flow_preview_ops)} / 已一致 {len(self.flow_preview_unchanged_ops)}"
         elif self.flow_preview_ops:
@@ -1488,7 +1488,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         preview_label = "河道预览" if self.flow_preview_kind == "river_skeleton" else "周边预览"
         max_distance = int(self.confluence_max_distance_var.get())
         distance_text = "不限距" if max_distance <= 0 else f"最大距 {max_distance}"
-        if self.flow_preview_kind == "confluence":
+        if self.flow_preview_kind in {"confluence", "river_skeleton"}:
             preview_detail = f"{preview_label} 需修改 {preview} / 已一致 {unchanged}"
         else:
             preview_detail = f"{preview_label} {preview} 个像元"
@@ -1736,11 +1736,15 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         unchanged_ops: Optional[List[Tuple[int, int, int]]] = None,
     ) -> None:
         unique: Dict[Tuple[int, int], int] = {}
+        unchanged_unique: Dict[Tuple[int, int], int] = {}
+        raster = self.flow_raster
         for row, col, code in ops:
             if kind == "confluence" and self._is_current_stream_cell(row, col):
                 continue
-            unique[(row, col)] = code
-        unchanged_unique: Dict[Tuple[int, int], int] = {}
+            if raster is not None and 0 <= row < raster.nrows and 0 <= col < raster.ncols and raster.value_at(row, col) == code:
+                unchanged_unique[(row, col)] = code
+            else:
+                unique[(row, col)] = code
         for row, col, code in unchanged_ops or []:
             if (row, col) in unique:
                 continue
