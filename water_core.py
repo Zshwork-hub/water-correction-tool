@@ -167,6 +167,14 @@ class VectorLayer:
 
 
 @dataclass
+class PolygonLayer:
+    path: Path
+    boundaries: List[List[Tuple[float, float]]]
+    bounds: Tuple[float, float, float, float]
+    crs_text: str = ""
+
+
+@dataclass
 class ChangeOp:
     row: int
     col: int
@@ -308,6 +316,61 @@ def parse_shapefile_lines(path: Path) -> VectorLayer:
 
         bounds = (min(all_x), min(all_y), max(all_x), max(all_y))
         return VectorLayer(path=path, polylines=polylines, bounds=bounds, crs_text=read_prj_text(path))
+
+
+def parse_shapefile_polygon(path: Path) -> PolygonLayer:
+    with path.open("rb") as f:
+        header = f.read(100)
+        if len(header) != 100:
+            raise ValueError(f"Invalid SHP header: {path}")
+
+        file_code = struct.unpack(">i", header[0:4])[0]
+        shp_type = struct.unpack("<i", header[32:36])[0]
+        if file_code != 9994:
+            raise ValueError(f"Invalid SHP file code: {path}")
+        if shp_type not in {5, 15, 25}:
+            raise ValueError(f"Unsupported polygon shapefile type {shp_type} in {path}")
+
+        boundaries: List[List[Tuple[float, float]]] = []
+        all_x: List[float] = []
+        all_y: List[float] = []
+        while True:
+            rec_hdr = f.read(8)
+            if len(rec_hdr) < 8:
+                break
+            _, rec_len = struct.unpack(">2i", rec_hdr)
+            rec = f.read(rec_len * 2)
+            if len(rec) < 4:
+                break
+            rec_type = struct.unpack("<i", rec[:4])[0]
+            if rec_type == 0:
+                continue
+            if rec_type not in {5, 15, 25}:
+                raise ValueError(f"Unsupported polygon record type {rec_type} in {path}")
+
+            offset = 4 + 32
+            num_parts, num_points = struct.unpack("<2i", rec[offset:offset + 8])
+            offset += 8
+            parts = list(struct.unpack(f"<{num_parts}i", rec[offset:offset + 4 * num_parts])) if num_parts else [0]
+            offset += 4 * num_parts
+            points = struct.unpack(f"<{num_points * 2}d", rec[offset:offset + 16 * num_points])
+            coords = [(points[i], points[i + 1]) for i in range(0, len(points), 2)]
+            parts.append(num_points)
+            for i in range(num_parts if num_parts else 1):
+                start = parts[i]
+                end = parts[i + 1]
+                ring = coords[start:end]
+                if len(ring) < 3:
+                    continue
+                boundaries.append(ring)
+                for x, y in ring:
+                    all_x.append(x)
+                    all_y.append(y)
+
+        if not boundaries:
+            raise ValueError(f"No polygon features found in {path}")
+        bounds = (min(all_x), min(all_y), max(all_x), max(all_y))
+        return PolygonLayer(path=path, boundaries=boundaries, bounds=bounds, crs_text=read_prj_text(path))
 
 
 def fmt_value(value: int) -> str:

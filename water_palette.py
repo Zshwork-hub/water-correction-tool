@@ -61,6 +61,8 @@ class PaletteMixin:
             "show_scale": self.show_scale_var.get(),
             "show_flow_arrows": self.show_flow_arrows_var.get(),
             "compare_original": self.compare_original_var.get(),
+            "show_confluence_polygon": self.show_confluence_polygon_var.get(),
+            "confluence_polygon_width": int(self.confluence_polygon_width_var.get()),
             "autosave": self.autosave_var.get(),
         }
 
@@ -87,6 +89,8 @@ class PaletteMixin:
         self.show_scale_var.set(bool(state.get("show_scale", self.show_scale_var.get())))
         self.show_flow_arrows_var.set(bool(state.get("show_flow_arrows", self.show_flow_arrows_var.get())))
         self.compare_original_var.set(bool(state.get("compare_original", self.compare_original_var.get())))
+        self.show_confluence_polygon_var.set(bool(state.get("show_confluence_polygon", self.show_confluence_polygon_var.get())))
+        self.confluence_polygon_width_var.set(int(state.get("confluence_polygon_width", self.confluence_polygon_width_var.get())))
         self.autosave_var.set(bool(state.get("autosave", self.autosave_var.get())))
 
     def save_palette_preset_dialog(self) -> None:

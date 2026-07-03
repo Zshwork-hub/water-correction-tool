@@ -6,7 +6,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 from PIL import Image, ImageDraw
 
-from water_core import DIR_COLORS, NODATA, STREAM_VALUE, RasterData, VectorLayer
+from water_core import DIR_COLORS, NODATA, STREAM_VALUE, PolygonLayer, RasterData, VectorLayer
 
 RGBA = Tuple[int, int, int, int]
 
@@ -80,6 +80,35 @@ def overlay_vector_layer(
             pts.append((col * zoom - view_x, row * zoom - view_y))
         if len(pts) >= 2:
             draw.line(pts, fill=vector_color, width=width)
+
+
+def overlay_polygon_boundary(
+    img: Image.Image,
+    raster: RasterData,
+    polygon_layer: Optional[PolygonLayer],
+    transformer,
+    zoom: float,
+    color: RGBA = (30, 110, 220, 180),
+    line_width: int = 1,
+    view_x: float = 0.0,
+    view_y: float = 0.0,
+) -> None:
+    if not polygon_layer:
+        return
+    draw = ImageDraw.Draw(img)
+    width = max(1, int(line_width))
+    for boundary in polygon_layer.boundaries:
+        pts = []
+        for x, y in boundary:
+            if transformer is not None:
+                x, y = transformer.transform(x, y)
+            row, col = raster.world_to_rc(x, y)
+            pts.append((col * zoom - view_x, row * zoom - view_y))
+        if len(pts) < 2:
+            continue
+        if pts[0] != pts[-1]:
+            pts.append(pts[0])
+        draw.line(pts, fill=color, width=width)
 
 
 def overlay_flow_arrows(
@@ -188,6 +217,11 @@ def render_viewport_image(
     vector_layer: Optional[VectorLayer] = None,
     transformer=None,
     vector_color: RGBA = (220, 30, 30, 190),
+    polygon_layer: Optional[PolygonLayer] = None,
+    polygon_transformer=None,
+    polygon_color: RGBA = (30, 110, 220, 180),
+    polygon_line_width: int = 1,
+    show_polygon_boundary: bool = True,
     show_grid: bool = False,
     show_scale: bool = True,
     show_flow_arrows: bool = False,
@@ -206,6 +240,11 @@ def render_viewport_image(
         vector_layer=vector_layer,
         transformer=transformer,
         vector_color=vector_color,
+        polygon_layer=polygon_layer,
+        polygon_transformer=polygon_transformer,
+        polygon_color=polygon_color,
+        polygon_line_width=polygon_line_width,
+        show_polygon_boundary=show_polygon_boundary,
         show_grid=show_grid,
         show_scale=show_scale,
         show_flow_arrows=show_flow_arrows,
@@ -227,6 +266,11 @@ def render_viewport_layers(
     vector_layer: Optional[VectorLayer] = None,
     transformer=None,
     vector_color: RGBA = (220, 30, 30, 190),
+    polygon_layer: Optional[PolygonLayer] = None,
+    polygon_transformer=None,
+    polygon_color: RGBA = (30, 110, 220, 180),
+    polygon_line_width: int = 1,
+    show_polygon_boundary: bool = True,
     show_grid: bool = False,
     show_scale: bool = True,
     show_flow_arrows: bool = False,
@@ -241,6 +285,18 @@ def render_viewport_layers(
     if show_grid:
         overlay_grid(overlay, raster, zoom, view_x=view_x, view_y=view_y)
     overlay_vector_layer(overlay, raster, vector_layer, transformer, zoom, vector_color, view_x=view_x, view_y=view_y)
+    if show_polygon_boundary:
+        overlay_polygon_boundary(
+            overlay,
+            raster,
+            polygon_layer,
+            polygon_transformer,
+            zoom,
+            color=polygon_color,
+            line_width=polygon_line_width,
+            view_x=view_x,
+            view_y=view_y,
+        )
     if show_flow_arrows and mode == "flow":
         overlay_flow_arrows(overlay, raster, zoom, view_x=view_x, view_y=view_y)
     if show_scale:

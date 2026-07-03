@@ -23,6 +23,7 @@ from water_core import (
     OPPOSITE_DIR,
     STREAM_VALUE,
     ChangeBatch,
+    PolygonLayer,
     RasterData,
     Transformer,
     app_base_dir,
@@ -30,6 +31,7 @@ from water_core import (
     direction_text,
     fmt_value,
     parse_asc,
+    parse_shapefile_polygon,
     parse_shapefile_lines,
     resolve_relative_or_absolute,
     write_asc,
@@ -76,6 +78,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.show_scale_var = tk.BooleanVar(value=True)
         self.show_flow_arrows_var = tk.BooleanVar(value=False)
         self.compare_original_var = tk.BooleanVar(value=False)
+        self.show_confluence_polygon_var = tk.BooleanVar(value=True)
+        self.confluence_polygon_width_var = tk.IntVar(value=1)
         self.autosave_var = tk.BooleanVar(value=True)
         self.preset_var = tk.StringVar(value="")
         self.info_var = tk.StringVar(value="就绪")
@@ -86,6 +90,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.stream_file_var = tk.StringVar(value="未加载")
         self.flow_file_var = tk.StringVar(value="未加载")
         self.shp_var = tk.StringVar(value="未加载")
+        self.confluence_shp_var = tk.StringVar(value="未加载")
         self.coord_var = tk.StringVar(value="")
         self.confluence_inner_radius_var = tk.IntVar(value=3)
         self.confluence_outer_radius_var = tk.IntVar(value=4)
@@ -108,6 +113,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             128: (49, 54, 149, 255),
         }
         self.vector_color: RGBA = (220, 30, 30, 190)
+        self.confluence_polygon_color: RGBA = (30, 110, 220, 180)
         self.selected_flow_cell: Optional[Tuple[int, int]] = None
         self.selected_flow_region: Optional[Tuple[int, int, int, int]] = None
         self.selected_flow_segment: Optional[FlowSegment] = None
@@ -127,7 +133,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.original_stream_raster: Optional[RasterData] = None
         self.original_flow_raster: Optional[RasterData] = None
         self.vector_layer = None
+        self.confluence_polygon_layer: Optional[PolygonLayer] = None
         self.transformer = None
+        self.confluence_transformer = None
 
         self.histories: Dict[str, List[ChangeBatch]] = {"stream": [], "flow": []}
         self.redo_stacks: Dict[str, List[ChangeBatch]] = {"stream": [], "flow": []}
@@ -307,6 +315,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         ttk.Label(file_box, textvariable=self.flow_file_var, wraplength=320).grid(row=1, column=1, sticky="w")
         ttk.Label(file_box, text="SHP:").grid(row=2, column=0, sticky="w")
         ttk.Label(file_box, textvariable=self.shp_var, wraplength=320).grid(row=2, column=1, sticky="w")
+        ttk.Label(file_box, text="汇流范围:").grid(row=3, column=0, sticky="w")
+        ttk.Label(file_box, textvariable=self.confluence_shp_var, wraplength=320).grid(row=3, column=1, sticky="w")
 
         status_box = ttk.LabelFrame(right, text="操作模式提示", padding=8)
         status_box.pack(fill="x", pady=(0, 8))
@@ -363,6 +373,15 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
         flow_assist_box = ttk.LabelFrame(right, text="流向辅助", padding=8)
         flow_assist_box.pack(fill="x", pady=(0, 8))
+        range_box = ttk.LabelFrame(flow_assist_box, text="0 汇流范围", padding=6)
+        range_box.pack(fill="x", pady=(0, 6))
+        self.btn_load_confluence_polygon = ttk.Button(range_box, text="加载范围SHP", command=self.load_confluence_polygon_dialog)
+        self.btn_load_confluence_polygon.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.chk_show_confluence_polygon = ttk.Checkbutton(range_box, text="显示边界", variable=self.show_confluence_polygon_var, command=lambda: self.render(full=True))
+        self.chk_show_confluence_polygon.grid(row=0, column=1, sticky="w", padx=(0, 4))
+        ttk.Label(range_box, text="线宽").grid(row=0, column=2, sticky="e", padx=(0, 4))
+        ttk.Spinbox(range_box, from_=1, to=8, increment=1, width=4, textvariable=self.confluence_polygon_width_var, command=lambda: self.render(full=True)).grid(row=0, column=3, sticky="w")
+        range_box.columnconfigure(0, weight=1)
         lock_box = ttk.LabelFrame(flow_assist_box, text="1 选择与锁定", padding=6)
         lock_box.pack(fill="x", pady=(0, 6))
         self.btn_pick_flow_segment = ttk.Button(lock_box, text="锁定选区河道", command=self.lock_visible_stream_skeleton)
@@ -465,6 +484,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.btn_reverse_segment: "将当前橙色预览结果写入流向栅格；河道像元不会被周边汇流覆盖。",
             self.btn_preview_segment: "清除当前预览，不修改数据。",
             self.btn_confirm_segment: "取消当前锁定的河道、出口和预览，选错时使用。",
+            self.btn_load_confluence_polygon: "加载面状 SHP 作为后续面范围汇流的边界图层，当前阶段只显示边界。",
+            self.chk_show_confluence_polygon: "显示或隐藏汇流范围面 SHP 边界。",
             self.btn_preview_confluence: "基于已锁定河道，预览周边非河道像元向河道汇流的方向。",
             self.btn_clear_flow_marks: "取消当前锁定的河道、出口和预览，选错时使用。",
             self.btn_apply_flow_preview: "将当前橙色预览结果写入流向栅格。",
@@ -525,9 +546,10 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         autosave_text = "开启" if self.autosave_var.get() else "关闭"
         stream_loaded = "已加载" if self.stream_raster is not None else "未加载"
         flow_loaded = "已加载" if self.flow_raster is not None else "未加载"
+        range_loaded = "，范围SHP已加载" if self.confluence_polygon_layer is not None else ""
         self.mode_status_var.set(f"当前模式：{mode_text}")
         self.tool_status_var.set(f"当前工具：{tool_text}  快捷键 {self._shortcut_label('brush')}=画笔 / {self._shortcut_label('eraser')}=橡皮擦")
-        self.flow_status_var.set(f"流向辅助：锁定 {locked_count} 个河道像元，{outlet_text}，{preview_text}")
+        self.flow_status_var.set(f"流向辅助：锁定 {locked_count} 个河道像元，{outlet_text}，{preview_text}{range_loaded}")
         self.session_status_var.set(f"数据：河道{stream_loaded}，流向{flow_loaded}；自动保存{autosave_text}")
 
     def edit_shortcuts(self) -> None:
@@ -568,20 +590,21 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.info_var.set(f"已切换到{label}")
 
     def _maybe_setup_transformer(self) -> None:
-        if not CRS or not Transformer or not self.vector_layer:
-            self.transformer = None
-            return
+        self.transformer = self._build_layer_transformer(self.vector_layer)
+        self.confluence_transformer = self._build_layer_transformer(self.confluence_polygon_layer)
+
+    def _build_layer_transformer(self, layer) -> Optional[Transformer]:
+        if not CRS or not Transformer or not layer:
+            return None
         raster = self.get_active_raster()
-        if raster is None or not raster.crs_text.strip() or not self.vector_layer.crs_text.strip():
-            self.transformer = None
-            return
-        if raster.crs_text.strip() == self.vector_layer.crs_text.strip():
-            self.transformer = None
-            return
+        if raster is None or not raster.crs_text.strip() or not layer.crs_text.strip():
+            return None
+        if raster.crs_text.strip() == layer.crs_text.strip():
+            return None
         try:
-            self.transformer = Transformer.from_crs(CRS.from_wkt(self.vector_layer.crs_text.strip()), CRS.from_wkt(raster.crs_text.strip()), always_xy=True)
+            return Transformer.from_crs(CRS.from_wkt(layer.crs_text.strip()), CRS.from_wkt(raster.crs_text.strip()), always_xy=True)
         except Exception:
-            self.transformer = None
+            return None
 
     def load_stream_dialog(self) -> None:
         path = filedialog.askopenfilename(title="选择河道ASC", filetypes=[("ASC files", "*.asc"), ("All files", "*.*")])
@@ -597,6 +620,11 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         path = filedialog.askopenfilename(title="选择SHP", filetypes=[("Shapefile", "*.shp"), ("All files", "*.*")])
         if path:
             self.load_shp(Path(path))
+
+    def load_confluence_polygon_dialog(self) -> None:
+        path = filedialog.askopenfilename(title="选择汇流范围面SHP", filetypes=[("Shapefile", "*.shp"), ("All files", "*.*")])
+        if path:
+            self.load_confluence_polygon(Path(path))
 
     def save_project_dialog(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -635,6 +663,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             "stream_path": self._store_path(self.stream_raster.path) if self.stream_raster is not None else "",
             "flow_path": self._store_path(self.flow_raster.path) if self.flow_raster is not None else "",
             "shp_path": self._store_path(self.vector_layer.path) if self.vector_layer is not None else "",
+            "confluence_polygon_path": self._store_path(self.confluence_polygon_layer.path) if self.confluence_polygon_layer is not None else "",
+            "show_confluence_polygon": self.show_confluence_polygon_var.get(),
+            "confluence_polygon_width": int(self.confluence_polygon_width_var.get()),
             "data_path": self._store_path(data_path),
             "palette_state": self._palette_state(),
         }
@@ -699,6 +730,11 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             resolved = self._resolve_stored_path(shp_path)
             if resolved.exists():
                 self.load_shp(resolved, update_autosave=False)
+        confluence_polygon_path = payload.get("confluence_polygon_path")
+        if isinstance(confluence_polygon_path, str) and confluence_polygon_path:
+            resolved = self._resolve_stored_path(confluence_polygon_path)
+            if resolved.exists():
+                self.load_confluence_polygon(resolved, update_autosave=False)
         mode = str(payload.get("mode", self.mode_var.get()))
         if mode in {"stream", "flow"}:
             self.mode_var.set(mode)
@@ -712,6 +748,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.zoom_var.set(float(payload.get("zoom", self.zoom_var.get())))
         self.confluence_inner_radius_var.set(int(payload.get("confluence_inner_radius", self.confluence_inner_radius_var.get())))
         self.confluence_outer_radius_var.set(int(payload.get("confluence_outer_radius", self.confluence_outer_radius_var.get())))
+        self.show_confluence_polygon_var.set(bool(payload.get("show_confluence_polygon", self.show_confluence_polygon_var.get())))
+        self.confluence_polygon_width_var.set(int(payload.get("confluence_polygon_width", self.confluence_polygon_width_var.get())))
         palette_state = payload.get("palette_state")
         if isinstance(palette_state, dict):
             self._apply_palette_state(palette_state)
@@ -797,6 +835,21 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.save_autosave()
         self.info_var.set(f"已加载SHP {path.name}")
 
+    def load_confluence_polygon(self, path: Path, update_autosave: bool = True) -> None:
+        try:
+            self.confluence_polygon_layer = parse_shapefile_polygon(path)
+        except Exception as exc:
+            messagebox.showerror("汇流范围SHP加载失败", str(exc))
+            return
+        self.confluence_shp_var.set(self._store_path(path))
+        self._maybe_setup_transformer()
+        self._invalidate_viewport_cache()
+        self.render(full=True)
+        self.update_mode_status()
+        if update_autosave and self.autosave_var.get():
+            self.save_autosave()
+        self.info_var.set(f"已加载汇流范围SHP {path.name}")
+
     def _confirm_raster_kind(self, raster: RasterData, expected: str) -> bool:
         if self._looks_like_raster_kind(raster, expected):
             return True
@@ -826,10 +879,13 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.original_stream_raster = None
         self.original_flow_raster = None
         self.vector_layer = None
+        self.confluence_polygon_layer = None
         self.transformer = None
+        self.confluence_transformer = None
         self.stream_file_var.set("未加载")
         self.flow_file_var.set("未加载")
         self.shp_var.set("未加载")
+        self.confluence_shp_var.set("未加载")
         self.histories = {"stream": [], "flow": []}
         self.redo_stacks = {"stream": [], "flow": []}
         self.snapshots = {"stream": [], "flow": []}
@@ -2108,6 +2164,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             or self.show_scale_var.get()
             or self.compare_original_var.get()
             or self.vector_layer is not None
+            or (self.confluence_polygon_layer is not None and self.show_confluence_polygon_var.get())
             or (self.mode_var.get() == "flow" and self.show_flow_arrows_var.get())
         )
 
@@ -2175,6 +2232,10 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             tuple(self.flow_palette.items()),
             self.vector_color,
             self.vector_layer.path.resolve() if self.vector_layer else None,
+            self.confluence_polygon_layer.path.resolve() if self.confluence_polygon_layer else None,
+            self.show_confluence_polygon_var.get(),
+            int(self.confluence_polygon_width_var.get()),
+            self.confluence_polygon_color,
             self.show_grid_var.get(),
             self.show_scale_var.get(),
             self.show_flow_arrows_var.get(),
@@ -2197,6 +2258,11 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 vector_layer=self.vector_layer,
                 transformer=self.transformer,
                 vector_color=self.vector_color,
+                polygon_layer=self.confluence_polygon_layer,
+                polygon_transformer=self.confluence_transformer,
+                polygon_color=self.confluence_polygon_color,
+                polygon_line_width=int(self.confluence_polygon_width_var.get()),
+                show_polygon_boundary=self.show_confluence_polygon_var.get(),
                 show_grid=self.show_grid_var.get(),
                 show_scale=self.show_scale_var.get(),
                 show_flow_arrows=self.show_flow_arrows_var.get(),
@@ -2234,6 +2300,11 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 vector_layer=self.vector_layer,
                 transformer=self.transformer,
                 vector_color=self.vector_color,
+                polygon_layer=self.confluence_polygon_layer,
+                polygon_transformer=self.confluence_transformer,
+                polygon_color=self.confluence_polygon_color,
+                polygon_line_width=int(self.confluence_polygon_width_var.get()),
+                show_polygon_boundary=self.show_confluence_polygon_var.get(),
                 show_grid=self.show_grid_var.get(),
                 show_scale=self.show_scale_var.get(),
                 show_flow_arrows=self.show_flow_arrows_var.get(),
@@ -2582,12 +2653,15 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 "show_scale": self.show_scale_var.get(),
                 "show_flow_arrows": self.show_flow_arrows_var.get(),
                 "compare_original": self.compare_original_var.get(),
+                "show_confluence_polygon": self.show_confluence_polygon_var.get(),
+                "confluence_polygon_width": int(self.confluence_polygon_width_var.get()),
                 "autosave": self.autosave_var.get(),
                 "stream": self._snapshot_raster_payload(self.stream_raster),
                 "flow": self._snapshot_raster_payload(self.flow_raster),
                 "original_stream": self._snapshot_raster_payload(self.original_stream_raster),
                 "original_flow": self._snapshot_raster_payload(self.original_flow_raster),
                 "shp_path": self._store_path(self.vector_layer.path) if self.vector_layer is not None else "",
+                "confluence_polygon_path": self._store_path(self.confluence_polygon_layer.path) if self.confluence_polygon_layer is not None else "",
                 "palette_state": self._palette_state(),
             }
             write_session_files(
@@ -2646,6 +2720,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.show_scale_var.set(bool(meta.get("show_scale", self.show_scale_var.get())))
             self.show_flow_arrows_var.set(bool(meta.get("show_flow_arrows", self.show_flow_arrows_var.get())))
             self.compare_original_var.set(bool(meta.get("compare_original", self.compare_original_var.get())))
+            self.show_confluence_polygon_var.set(bool(meta.get("show_confluence_polygon", self.show_confluence_polygon_var.get())))
+            self.confluence_polygon_width_var.set(int(meta.get("confluence_polygon_width", self.confluence_polygon_width_var.get())))
             self.autosave_var.set(bool(meta.get("autosave", self.autosave_var.get())))
             palette_state = meta.get("palette_state")
             if isinstance(palette_state, dict):
@@ -2657,6 +2733,12 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 if shp.exists():
                     self.vector_layer = parse_shapefile_lines(shp)
                     self.shp_var.set(self._store_path(shp))
+            confluence_polygon_path = meta.get("confluence_polygon_path")
+            if isinstance(confluence_polygon_path, str) and confluence_polygon_path:
+                polygon = self._resolve_stored_path(confluence_polygon_path)
+                if polygon.exists():
+                    self.confluence_polygon_layer = parse_shapefile_polygon(polygon)
+                    self.confluence_shp_var.set(self._store_path(polygon))
             if self.stream_raster is not None:
                 self.stream_file_var.set(self._store_path(self.stream_raster.path))
             if self.flow_raster is not None:
