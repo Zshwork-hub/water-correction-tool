@@ -96,6 +96,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.confluence_inner_radius_var = tk.IntVar(value=3)
         self.confluence_outer_radius_var = tk.IntVar(value=4)
         self.confluence_mode_var = tk.StringVar(value="近远带")
+        self.confluence_max_distance_var = tk.IntVar(value=30)
         self.river_flow_mode_var = tk.StringVar(value="平滑")
 
         self.stream_palette: Dict[str, RGBA] = {
@@ -438,8 +439,10 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         ttk.Spinbox(confluence_box, from_=1, to=30, increment=1, width=5, textvariable=self.confluence_inner_radius_var).grid(row=0, column=3, sticky="w", padx=(0, 8))
         ttk.Label(confluence_box, text="远带").grid(row=0, column=4, sticky="w")
         ttk.Spinbox(confluence_box, from_=1, to=30, increment=1, width=5, textvariable=self.confluence_outer_radius_var).grid(row=0, column=5, sticky="w", padx=(0, 8))
+        ttk.Label(confluence_box, text="最大距").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Spinbox(confluence_box, from_=0, to=300, increment=1, width=6, textvariable=self.confluence_max_distance_var).grid(row=1, column=1, sticky="w", padx=(0, 8), pady=(6, 0))
         self.btn_set_downstream = ttk.Button(confluence_box, text="预览周边汇流", command=self.preview_confirmed_confluence)
-        self.btn_set_downstream.grid(row=1, column=0, columnspan=6, sticky="ew", pady=(6, 0))
+        self.btn_set_downstream.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(6, 0))
         confluence_box.columnconfigure(5, weight=1)
 
         action_box = ttk.LabelFrame(flow_assist_box, text="4 应用与清理", padding=6)
@@ -682,6 +685,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             "vector_tol": float(self.vector_tol_var.get()),
             "river_flow_mode": self.river_flow_mode_var.get(),
             "confluence_mode": self.confluence_mode_var.get(),
+            "confluence_max_distance": int(self.confluence_max_distance_var.get()),
             "zoom": float(self.zoom_var.get()),
             "confluence_inner_radius": int(self.confluence_inner_radius_var.get()),
             "confluence_outer_radius": int(self.confluence_outer_radius_var.get()),
@@ -774,6 +778,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         confluence_mode = str(payload.get("confluence_mode", self.confluence_mode_var.get()))
         if confluence_mode in {"近远带", "范围SHP"}:
             self.confluence_mode_var.set(confluence_mode)
+        self.confluence_max_distance_var.set(int(payload.get("confluence_max_distance", self.confluence_max_distance_var.get())))
         self.zoom_var.set(float(payload.get("zoom", self.zoom_var.get())))
         self.confluence_inner_radius_var.set(int(payload.get("confluence_inner_radius", self.confluence_inner_radius_var.get())))
         self.confluence_outer_radius_var.set(int(payload.get("confluence_outer_radius", self.confluence_outer_radius_var.get())))
@@ -1435,7 +1440,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             selected = "未锁定河道"
         outlet = f"出口 {self.flow_skeleton_outlet}" if self.flow_skeleton_outlet is not None else "未设出口"
         preview_label = "河道预览" if self.flow_preview_kind == "river_skeleton" else "周边预览"
-        self.flow_assist_var.set(f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {preview_label} {preview} 个像元")
+        max_distance = int(self.confluence_max_distance_var.get())
+        distance_text = "不限距" if max_distance <= 0 else f"最大距 {max_distance}"
+        self.flow_assist_var.set(f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {distance_text}  {preview_label} {preview} 个像元")
 
     def set_flow_skeleton_outlet(self) -> None:
         if not self.confirmed_flow_segment_cells:
@@ -1630,16 +1637,18 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 messagebox.showinfo("提示", "汇流范围内没有可预览的非河道有效流向像元。")
                 return
             if candidate_count > 200000:
-                ok = messagebox.askyesno("确认预览", f"汇流范围内有 {candidate_count} 个候选像元，预览可能需要一些时间。是否继续？")
+                ok = messagebox.askyesno("确认预览", f"汇流范围内初筛有 {candidate_count} 个候选像元，预览可能需要一些时间。是否继续？")
                 if not ok:
                     return
-            ops, seed_edge_count, candidate_count = assistant.preview_polygon_confluence(locked_segments, candidate_mask)
+            max_distance = max(0, int(self.confluence_max_distance_var.get()))
+            ops, seed_edge_count, candidate_count = assistant.preview_polygon_confluence(locked_segments, candidate_mask, max_distance)
             if seed_edge_count == 0:
                 messagebox.showinfo("提示", "没有找到已锁定河道。")
                 return
             self._set_flow_preview(ops, "范围SHP汇流", "confluence", None)
+            distance_text = "不限距离" if max_distance <= 0 else f"最大距离 {max_distance} 像元"
             self.info_var.set(
-                f"范围SHP汇流预览完成，锁定河道 {seed_edge_count} 组，候选像元 {candidate_count} 个，方向建议 {len(self.flow_preview_ops)} 个"
+                f"范围SHP汇流预览完成，锁定河道 {seed_edge_count} 组，{distance_text}，候选像元 {candidate_count} 个，方向建议 {len(self.flow_preview_ops)} 个"
             )
             self._refresh_flow_controls()
             return
@@ -2800,6 +2809,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 "vector_tol": float(self.vector_tol_var.get()),
                 "river_flow_mode": self.river_flow_mode_var.get(),
                 "confluence_mode": self.confluence_mode_var.get(),
+                "confluence_max_distance": int(self.confluence_max_distance_var.get()),
                 "zoom": float(self.zoom_var.get()),
                 "confluence_inner_radius": int(self.confluence_inner_radius_var.get()),
                 "confluence_outer_radius": int(self.confluence_outer_radius_var.get()),
@@ -2870,6 +2880,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             confluence_mode = str(meta.get("confluence_mode", self.confluence_mode_var.get()))
             if confluence_mode in {"近远带", "范围SHP"}:
                 self.confluence_mode_var.set(confluence_mode)
+            self.confluence_max_distance_var.set(int(meta.get("confluence_max_distance", self.confluence_max_distance_var.get())))
             self.zoom_var.set(float(meta.get("zoom", self.zoom_var.get())))
             self.confluence_inner_radius_var.set(int(meta.get("confluence_inner_radius", self.confluence_inner_radius_var.get())))
             self.confluence_outer_radius_var.set(int(meta.get("confluence_outer_radius", self.confluence_outer_radius_var.get())))

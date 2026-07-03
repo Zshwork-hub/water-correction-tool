@@ -405,6 +405,7 @@ class FlowNetworkAssistant:
         self,
         locked_segments: List[Tuple[List[Cell], Cell]],
         candidate_mask: np.ndarray,
+        max_distance: int = 0,
     ) -> Tuple[List[Tuple[int, int, int]], int, int]:
         if candidate_mask.shape != (self.raster.nrows, self.raster.ncols):
             return [], 0, 0
@@ -430,11 +431,37 @@ class FlowNetworkAssistant:
                     added = True
             if added:
                 seed_count += 1
+        candidate_mask = self._limit_candidate_mask_by_distance(seed_mask, candidate_mask, max_distance)
         candidate_count = int(candidate_mask.sum())
         if not seed_mask.any() or candidate_count == 0:
             return [], seed_count, candidate_count
         ops = self._preview_polygon_confluence_from_masks(seed_mask, candidate_mask)
         return ops, seed_count, candidate_count
+
+    def _limit_candidate_mask_by_distance(
+        self,
+        seed_mask: np.ndarray,
+        candidate_mask: np.ndarray,
+        max_distance: int,
+    ) -> np.ndarray:
+        max_distance = int(max_distance)
+        if max_distance <= 0 or not seed_mask.any() or not candidate_mask.any():
+            return candidate_mask
+        active_mask = seed_mask | candidate_mask
+        active_rows, active_cols = np.where(active_mask)
+        if active_rows.size == 0:
+            return candidate_mask
+        pad = max(1, max_distance + 1)
+        row0 = max(0, int(active_rows.min()) - pad)
+        row1 = min(self.raster.nrows, int(active_rows.max()) + pad + 1)
+        col0 = max(0, int(active_cols.min()) - pad)
+        col1 = min(self.raster.ncols, int(active_cols.max()) + pad + 1)
+        local_seed_mask = seed_mask[row0:row1, col0:col1]
+        local_candidate_mask = candidate_mask[row0:row1, col0:col1]
+        dist = ndimage.distance_transform_edt(~local_seed_mask)
+        limited = np.zeros_like(candidate_mask, dtype=bool)
+        limited[row0:row1, col0:col1] = local_candidate_mask & (dist <= float(max_distance))
+        return limited
 
     def _preview_confluence_from_seed_mask(
         self,
