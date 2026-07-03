@@ -14,7 +14,7 @@ from water_geometry import brush_cells, line_cells
 
 class RasterEditingMixin:
     def current_edit_value(self) -> int:
-        if self.tool_var.get() == "eraser":
+        if self.tool_var.get() == "eraser" and self.mode_var.get() == "stream":
             return NODATA
         if self.mode_var.get() == "stream":
             return STREAM_VALUE
@@ -36,6 +36,10 @@ class RasterEditingMixin:
         if self.mode_var.get() != "flow":
             messagebox.showinfo("提示", "这个功能仅用于订正流向模式。")
             return
+        if self.tool_var.get() == "eraser":
+            self.tool_var.set("brush")
+            self.on_tool_changed()
+            messagebox.showinfo("提示", "订正流向模式禁用橡皮擦，已切换到画笔。")
         raster = self.get_active_raster()
         if raster is None:
             messagebox.showwarning("提示", "请先加载流向ASC。")

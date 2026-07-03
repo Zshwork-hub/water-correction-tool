@@ -344,8 +344,10 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
         tool_box = ttk.LabelFrame(edit_tab, text="编辑工具", padding=8)
         tool_box.pack(fill="x", pady=(0, 8))
-        ttk.Radiobutton(tool_box, text="画笔", variable=self.tool_var, value="brush", command=self.on_tool_changed).grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(tool_box, text="橡皮擦", variable=self.tool_var, value="eraser", command=self.on_tool_changed).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.radio_brush_tool = ttk.Radiobutton(tool_box, text="画笔", variable=self.tool_var, value="brush", command=self.on_tool_changed)
+        self.radio_brush_tool.grid(row=0, column=0, sticky="w")
+        self.radio_eraser_tool = ttk.Radiobutton(tool_box, text="橡皮擦", variable=self.tool_var, value="eraser", command=self.on_tool_changed)
+        self.radio_eraser_tool.grid(row=0, column=1, sticky="w", padx=(8, 0))
         ttk.Label(tool_box, text="方向").grid(row=1, column=0, sticky="w", pady=(8, 0))
         self.direction_box = ttk.Combobox(tool_box, state="readonly", values=[f"{code} {direction_text(code)}" for code in DIR_ORDER], textvariable=self.direction_var, width=12)
         self.direction_box.grid(row=1, column=1, sticky="w", pady=(8, 0))
@@ -499,6 +501,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.btn_zoom_out: "缩小当前视图。",
             self.btn_zoom_apply: "按输入框中的缩放值刷新。",
             self.btn_shortcuts: "设置画笔和橡皮擦的键盘快捷键。",
+            self.radio_eraser_tool: "橡皮擦仅用于订正河道；订正流向模式会自动禁用。",
             self.btn_vector_batch: "沿参考矢量线批量修正河道像元。",
             self.btn_flow_preview: "预览已锁定河道周边非河道像元的汇流建议。",
             self.btn_flow_apply: "将当前橙色流向预览结果写入流向栅格。",
@@ -550,10 +553,11 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
     def _update_shortcut_hint(self) -> None:
         if hasattr(self, "vector_hint"):
+            flow_note = "；流向模式禁用橡皮擦" if self.mode_var.get() == "flow" else ""
             self.vector_hint.configure(
                 text=(
                     f"快捷键：{self._shortcut_label('brush')}=画笔，{self._shortcut_label('eraser')}=橡皮擦；"
-                    "河道模式可用矢量批量修正，流向模式左键改方向"
+                    f"河道模式可用矢量批量修正，流向模式左键改方向{flow_note}"
                 )
             )
         self.update_mode_status()
@@ -611,6 +615,12 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
     def set_edit_tool(self, tool: str) -> None:
         if tool not in {"brush", "eraser"}:
+            return
+        if self.mode_var.get() == "flow" and tool == "eraser":
+            if self.tool_var.get() != "brush":
+                self.tool_var.set("brush")
+                self.on_tool_changed()
+            self.info_var.set("订正流向模式禁用橡皮擦，请选择方向后用画笔修改。")
             return
         if self.tool_var.get() == tool:
             return
@@ -958,10 +968,14 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
 
     def on_tool_changed(self) -> None:
         is_stream = self.mode_var.get() == "stream"
+        if not is_stream and self.tool_var.get() == "eraser":
+            self.tool_var.set("brush")
+            self.info_var.set("订正流向模式禁用橡皮擦，已切换到画笔。")
         self.direction_box.configure(state="disabled" if is_stream else "readonly")
         self.btn_apply_direction.configure(state="disabled" if is_stream else "normal")
         self.btn_flow_suggest.configure(state="disabled" if is_stream else "normal")
         self.btn_vector_batch.configure(state="normal" if is_stream else "disabled")
+        self.radio_eraser_tool.configure(state="normal" if is_stream else "disabled")
         self._refresh_flow_controls()
         self._update_shortcut_hint()
 
