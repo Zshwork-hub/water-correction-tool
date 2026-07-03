@@ -179,6 +179,22 @@ class PaletteMixin:
         self.preset_var.set(name)
         self.info_var.set(f"已加载预设 {name}")
 
+    def delete_palette_preset_dialog(self) -> None:
+        if not self.palette_presets:
+            messagebox.showinfo("提示", "暂无可删除的预设。", parent=self)
+            return
+        name = self.preset_var.get().strip()
+        if not name or name not in self.palette_presets:
+            messagebox.showinfo("提示", "请先在配色预设下拉框中选择一个预设。", parent=self)
+            return
+        if not messagebox.askyesno("删除预设", f"是否删除配色预设“{name}”？\n当前显示不会改变。", parent=self):
+            return
+        del self.palette_presets[name]
+        self._save_palette_presets()
+        self.preset_var.set("")
+        self._refresh_palette_preset_list()
+        self.info_var.set(f"已删除预设 {name}")
+
     def reset_palette_defaults(self) -> None:
         if not messagebox.askyesno("恢复默认颜色", "是否恢复默认颜色？显示开关和数据不会改变。", parent=self):
             return

@@ -426,7 +426,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.btn_load_preset = ttk.Button(preset_box, text="加载", command=self.load_palette_preset_dialog)
         self.btn_load_preset.grid(row=0, column=1, sticky="ew", padx=(0, 4))
         self.btn_save_preset = ttk.Button(preset_box, text="保存当前", command=self.save_palette_preset_dialog)
-        self.btn_save_preset.grid(row=0, column=2, sticky="ew")
+        self.btn_save_preset.grid(row=0, column=2, sticky="ew", padx=(0, 4))
+        self.btn_delete_preset = ttk.Button(preset_box, text="删除", command=self.delete_palette_preset_dialog)
+        self.btn_delete_preset.grid(row=0, column=3, sticky="ew")
         preset_box.columnconfigure(0, weight=1)
 
         info_box = ttk.LabelFrame(display_tab, text="像元信息", padding=8)
@@ -568,6 +570,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.preset_combo: "选择一个已保存的配色预设。",
             self.btn_save_preset: "把当前颜色和显示开关保存为预设。",
             self.btn_load_preset: "加载下拉框中选中的预设。",
+            self.btn_delete_preset: "删除下拉框中选中的配色预设，不改变当前显示。",
             self.chk_grid: "显示或隐藏网格。",
             self.chk_scale: "显示或隐藏比例尺。",
             self.chk_arrows: "在流向图层上叠加箭头。",
