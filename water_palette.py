@@ -12,28 +12,37 @@ from water_ui import PaletteEditorDialog
 RGBA = Tuple[int, int, int, int]
 
 ASSIST_PALETTE_ITEMS = [
-    ("需修改填充", "preview_change_fill"),
-    ("需修改边框", "preview_change_outline"),
-    ("需修改箭头", "preview_change_arrow"),
-    ("已一致填充", "preview_same_fill"),
-    ("已一致边框", "preview_same_outline"),
-    ("已一致箭头", "preview_same_arrow"),
-    ("锁定河道线", "locked_line"),
-    ("锁定河道填充", "locked_fill"),
-    ("选中河道线", "selected_line"),
-    ("选中河道填充", "selected_fill"),
-    ("框选边框", "region_outline"),
-    ("框选填充", "region_fill"),
-    ("源头填充", "source_fill"),
-    ("源头边框", "source_outline"),
-    ("出口填充", "outlet_fill"),
-    ("出口边框", "outlet_outline"),
-    ("节点填充", "node_fill"),
-    ("节点边框", "node_outline"),
+    ("预览需修改-填充", "preview_change_fill"),
+    ("预览需修改-边框", "preview_change_outline"),
+    ("预览需修改-箭头", "preview_change_arrow"),
+    ("预览已一致-填充", "preview_same_fill"),
+    ("预览已一致-边框", "preview_same_outline"),
+    ("预览已一致-箭头", "preview_same_arrow"),
+    ("锁定河道-线", "locked_line"),
+    ("锁定河道-填充", "locked_fill"),
+    ("当前选中-线", "selected_line"),
+    ("当前选中-填充", "selected_fill"),
+    ("框选区域-边框", "region_outline"),
+    ("框选区域-填充", "region_fill"),
+    ("源头标记-填充", "source_fill"),
+    ("源头标记-边框", "source_outline"),
+    ("出口标记-填充", "outlet_fill"),
+    ("出口标记-边框", "outlet_outline"),
+    ("节点标记-填充", "node_fill"),
+    ("节点标记-边框", "node_outline"),
 ]
 
 
 class PaletteMixin:
+    def _palette_color_state(self) -> Dict[str, object]:
+        return {
+            "stream_palette": {k: list(v) for k, v in self.stream_palette.items()},
+            "flow_palette": {str(k): list(v) for k, v in self.flow_palette.items()},
+            "vector_color": list(self.vector_color),
+            "confluence_polygon_color": list(self.confluence_polygon_color),
+            "assist_palette": {k: list(v) for k, v in self.assist_palette.items()},
+        }
+
     def pick_stream_palette(self) -> None:
         dialog = PaletteEditorDialog(
             self,
@@ -95,12 +104,7 @@ class PaletteMixin:
         self.render(full=True)
 
     def _palette_state(self) -> Dict[str, object]:
-        return {
-            "stream_palette": {k: list(v) for k, v in self.stream_palette.items()},
-            "flow_palette": {str(k): list(v) for k, v in self.flow_palette.items()},
-            "vector_color": list(self.vector_color),
-            "confluence_polygon_color": list(self.confluence_polygon_color),
-            "assist_palette": {k: list(v) for k, v in self.assist_palette.items()},
+        state = {
             "show_grid": self.show_grid_var.get(),
             "show_scale": self.show_scale_var.get(),
             "show_flow_arrows": self.show_flow_arrows_var.get(),
@@ -109,13 +113,15 @@ class PaletteMixin:
             "confluence_polygon_width": int(self.confluence_polygon_width_var.get()),
             "autosave": self.autosave_var.get(),
         }
+        state.update(self._palette_color_state())
+        return state
 
     def _apply_palette_state(self, state: Dict[str, object]) -> None:
         stream = state.get("stream_palette")
         if isinstance(stream, dict):
             for key in ("nodata", "river", "background"):
                 value = stream.get(key)
-                if isinstance(value, list) and len(value) == 4:
+                if isinstance(value, (list, tuple)) and len(value) == 4:
                     self.stream_palette[key] = tuple(int(v) for v in value)
         flow = state.get("flow_palette")
         if isinstance(flow, dict):
@@ -124,18 +130,18 @@ class PaletteMixin:
                     code = int(key)
                 except Exception:
                     continue
-                if isinstance(value, list) and len(value) == 4:
+                if isinstance(value, (list, tuple)) and len(value) == 4:
                     self.flow_palette[code] = tuple(int(v) for v in value)
         vector_color = state.get("vector_color")
-        if isinstance(vector_color, list) and len(vector_color) == 4:
+        if isinstance(vector_color, (list, tuple)) and len(vector_color) == 4:
             self.vector_color = tuple(int(v) for v in vector_color)
         confluence_polygon_color = state.get("confluence_polygon_color")
-        if isinstance(confluence_polygon_color, list) and len(confluence_polygon_color) == 4:
+        if isinstance(confluence_polygon_color, (list, tuple)) and len(confluence_polygon_color) == 4:
             self.confluence_polygon_color = tuple(int(v) for v in confluence_polygon_color)
         assist = state.get("assist_palette")
         if isinstance(assist, dict):
             for key, value in assist.items():
-                if key in self.assist_palette and isinstance(value, list) and len(value) == 4:
+                if key in self.assist_palette and isinstance(value, (list, tuple)) and len(value) == 4:
                     self.assist_palette[key] = tuple(int(v) for v in value)
         self.show_grid_var.set(bool(state.get("show_grid", self.show_grid_var.get())))
         self.show_scale_var.set(bool(state.get("show_scale", self.show_scale_var.get())))
@@ -149,8 +155,14 @@ class PaletteMixin:
         name = simpledialog.askstring("保存预设", "请输入预设名称：", parent=self)
         if not name:
             return
+        name = name.strip()
+        if not name:
+            return
+        if name in self.palette_presets and not messagebox.askyesno("覆盖预设", f"预设“{name}”已存在，是否覆盖？", parent=self):
+            return
         self.palette_presets[name] = self._palette_state()
         self._save_palette_presets()
+        self._refresh_palette_preset_list()
         self.preset_var.set(name)
         self.info_var.set(f"已保存预设 {name}")
 
@@ -158,14 +170,30 @@ class PaletteMixin:
         if not self.palette_presets:
             messagebox.showinfo("提示", "暂无可加载的预设。")
             return
-        names = list(self.palette_presets.keys())
-        name = simpledialog.askstring("加载预设", f"可用预设：{', '.join(names)}\n请输入名称：", parent=self)
+        name = self.preset_var.get().strip()
         if not name or name not in self.palette_presets:
+            messagebox.showinfo("提示", "请先在配色预设下拉框中选择一个预设。", parent=self)
             return
         self._apply_palette_state(self.palette_presets[name])
         self.render(full=True)
         self.preset_var.set(name)
         self.info_var.set(f"已加载预设 {name}")
+
+    def reset_palette_defaults(self) -> None:
+        if not messagebox.askyesno("恢复默认颜色", "是否恢复默认颜色？显示开关和数据不会改变。", parent=self):
+            return
+        self._apply_palette_state(self.default_palette_state)
+        self.render(full=True)
+        self.info_var.set("已恢复默认颜色")
+
+    def _refresh_palette_preset_list(self) -> None:
+        if not hasattr(self, "preset_combo"):
+            return
+        names = sorted(self.palette_presets.keys())
+        self.preset_combo.configure(values=names)
+        current = self.preset_var.get()
+        if current and current not in self.palette_presets:
+            self.preset_var.set("")
 
     def _save_palette_presets(self) -> None:
         payload = {"presets": self.palette_presets}
@@ -181,3 +209,4 @@ class PaletteMixin:
                 self.palette_presets = presets
         except Exception:
             self.palette_presets = {}
+        self._refresh_palette_preset_list()

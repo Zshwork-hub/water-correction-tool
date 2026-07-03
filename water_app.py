@@ -138,6 +138,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             "node_fill": (35, 110, 230, 235),
             "node_outline": (15, 55, 140, 255),
         }
+        self.default_palette_state = self._palette_color_state()
         self.selected_flow_cell: Optional[Tuple[int, int]] = None
         self.selected_flow_region: Optional[Tuple[int, int, int, int]] = None
         self.selected_flow_segment: Optional[FlowSegment] = None
@@ -388,7 +389,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.vector_hint = ttk.Label(tool_box, text="河道模式可用矢量批量修正；流向模式左键改方向、右键选中像元")
         self.vector_hint.grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
-        display_box = ttk.LabelFrame(display_tab, text="显示与配色", padding=8)
+        display_box = ttk.LabelFrame(display_tab, text="显示开关", padding=8)
         display_box.pack(fill="x", pady=(0, 8))
         self.chk_grid = ttk.Checkbutton(display_box, text="网格", variable=self.show_grid_var, command=self.render)
         self.chk_grid.grid(row=0, column=0, sticky="w", padx=(0, 8))
@@ -398,22 +399,35 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.chk_arrows.grid(row=0, column=2, sticky="w", padx=(0, 8))
         self.chk_compare = ttk.Checkbutton(display_box, text="原始对比", variable=self.compare_original_var, command=self.render)
         self.chk_compare.grid(row=0, column=3, sticky="w")
-        self.btn_stream_palette = ttk.Button(display_box, text="河道配色", command=self.pick_stream_palette)
-        self.btn_stream_palette.grid(row=1, column=0, sticky="ew", padx=(0, 4), pady=(8, 0))
-        self.btn_flow_palette = ttk.Button(display_box, text="流向配色", command=self.pick_flow_palette)
-        self.btn_flow_palette.grid(row=1, column=1, sticky="ew", padx=(0, 4), pady=(8, 0))
-        self.btn_vector_color = ttk.Button(display_box, text="矢量颜色", command=self.pick_vector_color)
-        self.btn_vector_color.grid(row=1, column=2, sticky="ew", padx=(0, 4), pady=(8, 0))
-        self.btn_confluence_polygon_color = ttk.Button(display_box, text="范围颜色", command=self.pick_confluence_polygon_color)
-        self.btn_confluence_polygon_color.grid(row=1, column=3, sticky="ew", pady=(8, 0))
-        self.btn_assist_palette = ttk.Button(display_box, text="辅助颜色", command=self.pick_assist_palette)
-        self.btn_assist_palette.grid(row=2, column=2, sticky="ew", padx=(0, 4), pady=(8, 0))
-        self.btn_save_preset = ttk.Button(display_box, text="保存预设", command=self.save_palette_preset_dialog)
-        self.btn_save_preset.grid(row=2, column=0, sticky="ew", padx=(0, 4), pady=(8, 0))
-        self.btn_load_preset = ttk.Button(display_box, text="加载预设", command=self.load_palette_preset_dialog)
-        self.btn_load_preset.grid(row=2, column=1, sticky="ew", padx=(0, 4), pady=(8, 0))
+
+        color_box = ttk.LabelFrame(display_tab, text="颜色编辑", padding=8)
+        color_box.pack(fill="x", pady=(0, 8))
+        self.btn_stream_palette = ttk.Button(color_box, text="河道栅格", command=self.pick_stream_palette)
+        self.btn_stream_palette.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.btn_flow_palette = ttk.Button(color_box, text="流向栅格", command=self.pick_flow_palette)
+        self.btn_flow_palette.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+        self.btn_vector_color = ttk.Button(color_box, text="河流线SHP", command=self.pick_vector_color)
+        self.btn_vector_color.grid(row=0, column=2, sticky="ew", padx=(0, 4))
+        self.btn_confluence_polygon_color = ttk.Button(color_box, text="范围面SHP", command=self.pick_confluence_polygon_color)
+        self.btn_confluence_polygon_color.grid(row=1, column=0, sticky="ew", padx=(0, 4), pady=(8, 0))
+        self.btn_assist_palette = ttk.Button(color_box, text="辅助标记", command=self.pick_assist_palette)
+        self.btn_assist_palette.grid(row=1, column=1, sticky="ew", padx=(0, 4), pady=(8, 0))
+        self.btn_reset_palette = ttk.Button(color_box, text="恢复默认颜色", command=self.reset_palette_defaults)
+        self.btn_reset_palette.grid(row=1, column=2, sticky="ew", padx=(0, 4), pady=(8, 0))
         for col in range(4):
             display_box.columnconfigure(col, weight=1)
+        for col in range(3):
+            color_box.columnconfigure(col, weight=1)
+
+        preset_box = ttk.LabelFrame(display_tab, text="配色预设", padding=8)
+        preset_box.pack(fill="x", pady=(0, 8))
+        self.preset_combo = ttk.Combobox(preset_box, state="readonly", textvariable=self.preset_var, values=[], width=18)
+        self.preset_combo.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.btn_load_preset = ttk.Button(preset_box, text="加载", command=self.load_palette_preset_dialog)
+        self.btn_load_preset.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+        self.btn_save_preset = ttk.Button(preset_box, text="保存当前", command=self.save_palette_preset_dialog)
+        self.btn_save_preset.grid(row=0, column=2, sticky="ew")
+        preset_box.columnconfigure(0, weight=1)
 
         info_box = ttk.LabelFrame(display_tab, text="像元信息", padding=8)
         info_box.pack(fill="x", pady=(0, 8))
@@ -545,13 +559,15 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.btn_clear_flow_marks: "取消当前锁定的河道、出口和预览，选错时使用。",
             self.btn_apply_flow_preview: "将当前橙色预览结果写入流向栅格。",
             self.btn_clear_flow_preview: "清除当前流向辅助预览，不修改数据。",
-            self.btn_stream_palette: "修改河道模式配色。",
-            self.btn_flow_palette: "修改流向模式配色。",
-            self.btn_vector_color: "修改矢量叠加颜色。",
-            self.btn_confluence_polygon_color: "修改汇流范围面 SHP 边界颜色。",
-            self.btn_assist_palette: "修改流向辅助预览、锁定河道和出口等辅助标记颜色。",
-            self.btn_save_preset: "保存当前配色和显示设置。",
-            self.btn_load_preset: "加载已保存预设。",
+            self.btn_stream_palette: "修改河道栅格的 NoData、河道和背景颜色。",
+            self.btn_flow_palette: "修改 8 个 D8 流向和 NoData 的栅格颜色。",
+            self.btn_vector_color: "修改河流参考线 SHP 的叠加颜色。",
+            self.btn_confluence_polygon_color: "修改汇流范围面 SHP 的边界颜色。",
+            self.btn_assist_palette: "修改流向预览、框选、锁定河道、源头/节点/出口等辅助标记颜色。",
+            self.btn_reset_palette: "恢复内置默认颜色，不改变数据和显示开关。",
+            self.preset_combo: "选择一个已保存的配色预设。",
+            self.btn_save_preset: "把当前颜色和显示开关保存为预设。",
+            self.btn_load_preset: "加载下拉框中选中的预设。",
             self.chk_grid: "显示或隐藏网格。",
             self.chk_scale: "显示或隐藏比例尺。",
             self.chk_arrows: "在流向图层上叠加箭头。",

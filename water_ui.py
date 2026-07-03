@@ -65,18 +65,33 @@ class PaletteEditorDialog(tk.Toplevel):
         self.result: Optional[Dict[str, RGBA]] = None
         self._colors: Dict[str, RGBA] = {name: color for name, color in entries}
         self._swatches: Dict[str, tk.Button] = {}
+        self._alpha_vars: Dict[str, tk.IntVar] = {}
 
         body = ttk.Frame(self, padding=12)
         body.pack(fill="both", expand=True)
+        ttk.Label(body, text="项目").grid(row=0, column=0, sticky="w")
+        ttk.Label(body, text="颜色").grid(row=0, column=1, sticky="w", padx=(8, 0))
+        ttk.Label(body, text="透明度").grid(row=0, column=2, sticky="w", padx=(8, 0))
         for row, (name, color) in enumerate(entries):
-            ttk.Label(body, text=name, width=12).grid(row=row, column=0, sticky="w", pady=4)
+            grid_row = row + 1
+            ttk.Label(body, text=name, width=18).grid(row=grid_row, column=0, sticky="w", pady=4)
             swatch = tk.Button(body, width=16, relief="flat", command=lambda n=name: self._pick_color(n))
-            swatch.grid(row=row, column=1, sticky="w", padx=(8, 0), pady=4)
+            swatch.grid(row=grid_row, column=1, sticky="w", padx=(8, 0), pady=4)
             self._swatches[name] = swatch
+            alpha_var = tk.IntVar(value=color[3])
+            self._alpha_vars[name] = alpha_var
+            ttk.Spinbox(
+                body,
+                from_=0,
+                to=255,
+                increment=5,
+                width=6,
+                textvariable=alpha_var,
+            ).grid(row=grid_row, column=2, sticky="w", padx=(8, 0), pady=4)
             self._set_swatch(name, color)
 
         actions = ttk.Frame(body)
-        actions.grid(row=len(entries), column=0, columnspan=2, sticky="e", pady=(12, 0))
+        actions.grid(row=len(entries) + 1, column=0, columnspan=3, sticky="e", pady=(12, 0))
         ttk.Button(actions, text="取消", command=self._cancel).pack(side="right", padx=(6, 0))
         ttk.Button(actions, text="应用", command=self._apply).pack(side="right")
         self.bind("<Escape>", lambda e: self._cancel())
@@ -105,6 +120,13 @@ class PaletteEditorDialog(tk.Toplevel):
         self._set_swatch(name, (r, g, b, current[3]))
 
     def _apply(self) -> None:
+        for name, color in list(self._colors.items()):
+            try:
+                alpha = int(self._alpha_vars[name].get())
+            except Exception:
+                alpha = color[3]
+            alpha = max(0, min(255, alpha))
+            self._colors[name] = (color[0], color[1], color[2], alpha)
         self.result = dict(self._colors)
         self.destroy()
 
