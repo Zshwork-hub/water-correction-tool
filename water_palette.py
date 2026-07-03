@@ -11,6 +11,27 @@ from water_ui import PaletteEditorDialog
 
 RGBA = Tuple[int, int, int, int]
 
+ASSIST_PALETTE_ITEMS = [
+    ("需修改填充", "preview_change_fill"),
+    ("需修改边框", "preview_change_outline"),
+    ("需修改箭头", "preview_change_arrow"),
+    ("已一致填充", "preview_same_fill"),
+    ("已一致边框", "preview_same_outline"),
+    ("已一致箭头", "preview_same_arrow"),
+    ("锁定河道线", "locked_line"),
+    ("锁定河道填充", "locked_fill"),
+    ("选中河道线", "selected_line"),
+    ("选中河道填充", "selected_fill"),
+    ("框选边框", "region_outline"),
+    ("框选填充", "region_fill"),
+    ("源头填充", "source_fill"),
+    ("源头边框", "source_outline"),
+    ("出口填充", "outlet_fill"),
+    ("出口边框", "outlet_outline"),
+    ("节点填充", "node_fill"),
+    ("节点边框", "node_outline"),
+]
+
 
 class PaletteMixin:
     def pick_stream_palette(self) -> None:
@@ -60,12 +81,26 @@ class PaletteMixin:
         self.confluence_polygon_color = dialog.result["范围边界"]
         self.render(full=True)
 
+    def pick_assist_palette(self) -> None:
+        dialog = PaletteEditorDialog(
+            self,
+            "辅助标记颜色",
+            [(label, self.assist_palette[key]) for label, key in ASSIST_PALETTE_ITEMS],
+        )
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        for label, key in ASSIST_PALETTE_ITEMS:
+            self.assist_palette[key] = dialog.result[label]
+        self.render(full=True)
+
     def _palette_state(self) -> Dict[str, object]:
         return {
             "stream_palette": {k: list(v) for k, v in self.stream_palette.items()},
             "flow_palette": {str(k): list(v) for k, v in self.flow_palette.items()},
             "vector_color": list(self.vector_color),
             "confluence_polygon_color": list(self.confluence_polygon_color),
+            "assist_palette": {k: list(v) for k, v in self.assist_palette.items()},
             "show_grid": self.show_grid_var.get(),
             "show_scale": self.show_scale_var.get(),
             "show_flow_arrows": self.show_flow_arrows_var.get(),
@@ -97,6 +132,11 @@ class PaletteMixin:
         confluence_polygon_color = state.get("confluence_polygon_color")
         if isinstance(confluence_polygon_color, list) and len(confluence_polygon_color) == 4:
             self.confluence_polygon_color = tuple(int(v) for v in confluence_polygon_color)
+        assist = state.get("assist_palette")
+        if isinstance(assist, dict):
+            for key, value in assist.items():
+                if key in self.assist_palette and isinstance(value, list) and len(value) == 4:
+                    self.assist_palette[key] = tuple(int(v) for v in value)
         self.show_grid_var.set(bool(state.get("show_grid", self.show_grid_var.get())))
         self.show_scale_var.set(bool(state.get("show_scale", self.show_scale_var.get())))
         self.show_flow_arrows_var.set(bool(state.get("show_flow_arrows", self.show_flow_arrows_var.get())))

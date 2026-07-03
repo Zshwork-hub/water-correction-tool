@@ -118,6 +118,26 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         }
         self.vector_color: RGBA = (220, 30, 30, 190)
         self.confluence_polygon_color: RGBA = (30, 110, 220, 180)
+        self.assist_palette: Dict[str, RGBA] = {
+            "preview_change_fill": (255, 205, 45, 115),
+            "preview_change_outline": (230, 95, 0, 255),
+            "preview_change_arrow": (165, 35, 0, 255),
+            "preview_same_fill": (40, 150, 220, 70),
+            "preview_same_outline": (35, 120, 180, 190),
+            "preview_same_arrow": (25, 95, 150, 210),
+            "locked_line": (70, 140, 255, 255),
+            "locked_fill": (70, 140, 255, 115),
+            "selected_line": (255, 153, 0, 255),
+            "selected_fill": (255, 192, 80, 130),
+            "region_outline": (0, 110, 220, 240),
+            "region_fill": (0, 110, 220, 30),
+            "source_fill": (30, 170, 80, 235),
+            "source_outline": (10, 90, 40, 255),
+            "outlet_fill": (220, 45, 40, 240),
+            "outlet_outline": (120, 20, 20, 255),
+            "node_fill": (35, 110, 230, 235),
+            "node_outline": (15, 55, 140, 255),
+        }
         self.selected_flow_cell: Optional[Tuple[int, int]] = None
         self.selected_flow_region: Optional[Tuple[int, int, int, int]] = None
         self.selected_flow_segment: Optional[FlowSegment] = None
@@ -386,6 +406,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.btn_vector_color.grid(row=1, column=2, sticky="ew", padx=(0, 4), pady=(8, 0))
         self.btn_confluence_polygon_color = ttk.Button(display_box, text="范围颜色", command=self.pick_confluence_polygon_color)
         self.btn_confluence_polygon_color.grid(row=1, column=3, sticky="ew", pady=(8, 0))
+        self.btn_assist_palette = ttk.Button(display_box, text="辅助颜色", command=self.pick_assist_palette)
+        self.btn_assist_palette.grid(row=2, column=2, sticky="ew", padx=(0, 4), pady=(8, 0))
         self.btn_save_preset = ttk.Button(display_box, text="保存预设", command=self.save_palette_preset_dialog)
         self.btn_save_preset.grid(row=2, column=0, sticky="ew", padx=(0, 4), pady=(8, 0))
         self.btn_load_preset = ttk.Button(display_box, text="加载预设", command=self.load_palette_preset_dialog)
@@ -527,6 +549,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.btn_flow_palette: "修改流向模式配色。",
             self.btn_vector_color: "修改矢量叠加颜色。",
             self.btn_confluence_polygon_color: "修改汇流范围面 SHP 边界颜色。",
+            self.btn_assist_palette: "修改流向辅助预览、锁定河道和出口等辅助标记颜色。",
             self.btn_save_preset: "保存当前配色和显示设置。",
             self.btn_load_preset: "加载已保存预设。",
             self.chk_grid: "显示或隐藏网格。",
@@ -2570,7 +2593,12 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             x1 = max(x0 + 1, int(math.ceil((col1 + 1) * zoom - self._view_x)))
             y1 = max(y0 + 1, int(math.ceil((row1 + 1) * zoom - self._view_y)))
             draw = ImageDraw.Draw(overlay)
-            draw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(0, 110, 220, 240), width=max(2, int(round(max(1.0, zoom / 8.0)))), fill=(0, 110, 220, 30))
+            draw.rectangle(
+                (x0, y0, x1 - 1, y1 - 1),
+                outline=self.assist_palette["region_outline"],
+                width=max(2, int(round(max(1.0, zoom / 8.0)))),
+                fill=self.assist_palette["region_fill"],
+            )
         if self.selected_flow_cell is not None:
             overlay_selection(overlay, raster, self.selected_flow_cell, zoom, view_x=self._view_x, view_y=self._view_y)
         self._draw_flow_assist_markers(overlay, raster, zoom)
@@ -2590,9 +2618,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 row,
                 col,
                 code,
-                fill=(40, 150, 220, 70),
-                outline=(35, 120, 180, 190),
-                arrow=(25, 95, 150, 210),
+                fill=self.assist_palette["preview_same_fill"],
+                outline=self.assist_palette["preview_same_outline"],
+                arrow=self.assist_palette["preview_same_arrow"],
                 width_scale=9.0,
             )
         for row, col, code in self.flow_preview_ops:
@@ -2604,9 +2632,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 row,
                 col,
                 code,
-                fill=(255, 205, 45, 115),
-                outline=(230, 95, 0, 255),
-                arrow=(165, 35, 0, 255),
+                fill=self.assist_palette["preview_change_fill"],
+                outline=self.assist_palette["preview_change_outline"],
+                arrow=self.assist_palette["preview_change_arrow"],
                 width_scale=7.0,
             )
 
@@ -2693,8 +2721,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         cy = (row + 0.5) * zoom - self._view_y
         if cx < -size or cy < -size or cx > image_size[0] + size or cy > image_size[1] + size:
             return
-        fill = (220, 45, 40, 240)
-        outline = (120, 20, 20, 255)
+        fill = self.assist_palette["outlet_fill"]
+        outline = self.assist_palette["outlet_outline"]
         draw.ellipse((cx - size, cy - size, cx + size, cy + size), fill=fill, outline=outline, width=2)
         draw.text((cx + size + 2, cy - size), "出口", fill=outline)
 
@@ -2717,24 +2745,34 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
                 continue
             label = str(idx)
             if kind == "source":
-                color = (30, 170, 80, 235)
-                outline = (10, 90, 40, 255)
+                color = self.assist_palette["source_fill"]
+                outline = self.assist_palette["source_outline"]
                 points = [(cx, cy - size), (cx - size, cy + size), (cx + size, cy + size)]
                 draw.polygon(points, fill=color, outline=outline)
                 draw.text((cx + size + 2, cy - size), f"S{label}", fill=outline)
             elif kind == "outlet":
-                color = (220, 50, 45, 235)
-                outline = (120, 20, 20, 255)
+                color = self.assist_palette["outlet_fill"]
+                outline = self.assist_palette["outlet_outline"]
                 draw.ellipse((cx - size, cy - size, cx + size, cy + size), fill=color, outline=outline, width=2)
                 draw.text((cx + size + 2, cy - size), f"O{label}", fill=outline)
             else:
-                color = (35, 110, 230, 235)
-                outline = (15, 55, 140, 255)
+                color = self.assist_palette["node_fill"]
+                outline = self.assist_palette["node_outline"]
                 draw.rectangle((cx - size, cy - size, cx + size, cy + size), fill=color, outline=outline, width=2)
                 draw.text((cx + size + 2, cy - size), f"N{label}", fill=outline)
 
     def _draw_selected_flow_segment(self, draw: ImageDraw.ImageDraw, image_size: Tuple[int, int], raster: RasterData, zoom: float, size: int) -> None:
-        self._draw_flow_segment(draw, image_size, raster, zoom, self.selected_flow_segment, self.flow_segment_downstream, (255, 153, 0, 255), (255, 192, 80, 130), size)
+        self._draw_flow_segment(
+            draw,
+            image_size,
+            raster,
+            zoom,
+            self.selected_flow_segment,
+            self.flow_segment_downstream,
+            self.assist_palette["selected_line"],
+            self.assist_palette["selected_fill"],
+            size,
+        )
 
     def _draw_confirmed_flow_segment(
         self,
@@ -2751,7 +2789,15 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         cells = self.confirmed_flow_segment_cells.get(edge_key)
         if not cells or len(cells) < 2:
             return
-        self._draw_locked_skeleton_cells(draw, image_size, raster, zoom, cells, (70, 140, 255, 255), (70, 140, 255, 115))
+        self._draw_locked_skeleton_cells(
+            draw,
+            image_size,
+            raster,
+            zoom,
+            cells,
+            self.assist_palette["locked_line"],
+            self.assist_palette["locked_fill"],
+        )
 
     def _draw_locked_skeleton_cells(
         self,
