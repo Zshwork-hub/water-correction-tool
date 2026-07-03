@@ -453,7 +453,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.btn_pick_flow_segment.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         self.btn_add_locked_cell = ttk.Button(lock_box, text="补锁单像元", command=self.add_selected_stream_cell_to_lock)
         self.btn_add_locked_cell.grid(row=0, column=1, sticky="ew", padx=(0, 4))
-        self.btn_remove_locked_region = ttk.Button(lock_box, text="清除选区锁定", command=self.remove_selected_locked_region)
+        self.btn_remove_locked_region = ttk.Button(lock_box, text="清除选区", command=self.remove_selected_locked_region)
         self.btn_remove_locked_region.grid(row=0, column=2, sticky="ew")
         for col in range(3):
             lock_box.columnconfigure(col, weight=1)
@@ -494,9 +494,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         action_box.pack(fill="x", pady=(0, 6))
         self.btn_reverse_segment = ttk.Button(action_box, text="应用预览", command=self.apply_flow_preview)
         self.btn_reverse_segment.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.btn_preview_segment = ttk.Button(action_box, text="清除预览", command=self.clear_flow_preview)
+        self.btn_preview_segment = ttk.Button(action_box, text="清除当前预览", command=self.clear_flow_preview)
         self.btn_preview_segment.grid(row=0, column=1, sticky="ew", padx=(0, 4))
-        self.btn_confirm_segment = ttk.Button(action_box, text="取消锁定", command=self.clear_flow_segment_state)
+        self.btn_confirm_segment = ttk.Button(action_box, text="清空锁定", command=self.clear_flow_segment_state)
         self.btn_confirm_segment.grid(row=0, column=2, sticky="ew")
         for col in range(3):
             action_box.columnconfigure(col, weight=1)
@@ -551,16 +551,16 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.confluence_mode_box: "选择按近远带缓冲汇流，或按汇流范围 SHP 面内汇流。",
             self.btn_add_locked_cell: "把当前右键单点选中的 Stream=1 河道像元补充加入锁定。",
             self.btn_remove_locked_region: "只清除当前右键单点或拖框范围内的已锁定河道，其他锁定保留。",
-            self.btn_reverse_segment: "将当前橙色预览结果写入流向栅格；河道像元不会被周边汇流覆盖。",
-            self.btn_preview_segment: "清除当前预览，不修改数据。",
-            self.btn_confirm_segment: "取消当前锁定的河道、出口和预览，选错时使用。",
+            self.btn_reverse_segment: "只将当前橙色预览结果写入流向栅格；蓝色已一致像元不会写入。",
+            self.btn_preview_segment: "清除当前河道流向或周边汇流预览，不修改数据，也不清除锁定河道。",
+            self.btn_confirm_segment: "清空所有已锁定河道、出口和当前预览，选错范围较大时使用。",
             self.btn_load_confluence_polygon: "加载面状 SHP 作为后续面范围汇流的边界图层，当前阶段只显示边界。",
             self.chk_show_confluence_polygon: "显示或隐藏汇流范围面 SHP 边界。",
             self.btn_lock_polygon_stream: "将汇流范围面内的 Stream=1 河道像元加入当前锁定骨架，不修改栅格值。",
             self.btn_preview_confluence: "基于已锁定河道，预览周边非河道像元向河道汇流的方向。",
-            self.btn_clear_flow_marks: "取消当前锁定的河道、出口和预览，选错时使用。",
-            self.btn_apply_flow_preview: "将当前橙色预览结果写入流向栅格。",
-            self.btn_clear_flow_preview: "清除当前流向辅助预览，不修改数据。",
+            self.btn_clear_flow_marks: "清空所有已锁定河道、出口和当前预览，选错范围较大时使用。",
+            self.btn_apply_flow_preview: "只将当前橙色预览结果写入流向栅格。",
+            self.btn_clear_flow_preview: "清除当前流向辅助预览，不修改数据，也不清除锁定河道。",
             self.btn_stream_palette: "修改河道栅格的 NoData、河道和背景颜色。",
             self.btn_flow_palette: "修改 8 个 D8 流向和 NoData 的栅格颜色。",
             self.btn_vector_color: "修改河流参考线 SHP 的叠加颜色。",
@@ -1549,9 +1549,9 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             return "下一步：右键单点或拖框选择目标河道，然后点击“锁定选区河道”。"
         if self.flow_preview_kind:
             if self.flow_preview_ops:
-                return f"下一步：点击“{self._flow_apply_button_text()}”写入橙色像元，或清除预览后重新计算。"
+                return f"下一步：点击“{self._flow_apply_button_text()}”写入橙色像元，或“清除当前预览”后重新计算。"
             if self.flow_preview_unchanged_ops:
-                return "下一步：当前预览没有需修改像元，可清除预览或调整范围后重试。"
+                return "下一步：当前预览没有需修改像元，可“清除当前预览”或调整范围后重试。"
             return "下一步：当前没有可预览像元，可调整锁定河道、出口或汇流范围。"
         if self.flow_skeleton_outlet is None:
             if self.selected_flow_cell in locked_cells:
