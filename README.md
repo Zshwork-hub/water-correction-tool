@@ -77,5 +77,6 @@ dist\水系订正工具_V2.1.0.exe
 - `docs/V2.1工作流测试清单.md`
 - `docs/V2.1发布说明.md`
 - `docs/V2.1打包发布清单.md`
+- `docs/V2.2需求池.md`
 - `docs/V2.0发布说明.md`
 - `docs/V2.0审查与优化记录.md`
