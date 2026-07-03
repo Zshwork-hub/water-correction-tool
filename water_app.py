@@ -42,6 +42,7 @@ from water_flow_assist import FlowNetworkAssistant, FlowSegment, direction_from_
 from water_history import EditingHistoryMixin
 from water_palette import PaletteMixin
 from water_project import project_data_path, raster_payload, read_project_arrays, read_project_payload, read_session_files, rebuild_raster, write_project_files, write_session_files
+from water_polygon import point_in_any_ring, rings_bounds
 from water_render import build_base_image, overlay_flow_arrows, overlay_grid, overlay_scale_bar, overlay_selection, overlay_vector_layer, render_viewport_image, render_viewport_layers
 from water_shortcuts import DEFAULT_SHORTCUTS, load_shortcuts, normalize_shortcut, save_shortcuts, shortcut_label
 from water_ui import FitTargetDialog, ShortcutSettingsDialog, ToolTip
@@ -397,6 +398,8 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.chk_show_confluence_polygon.grid(row=0, column=0, sticky="w", padx=(0, 12))
         ttk.Label(range_box, text="线宽").grid(row=0, column=1, sticky="e", padx=(0, 4))
         ttk.Spinbox(range_box, from_=1, to=8, increment=1, width=4, textvariable=self.confluence_polygon_width_var, command=lambda: self.render(full=True)).grid(row=0, column=2, sticky="w")
+        self.btn_lock_polygon_stream = ttk.Button(range_box, text="锁定范围内河道", command=self.lock_confluence_polygon_stream_skeleton)
+        self.btn_lock_polygon_stream.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
         range_box.columnconfigure(2, weight=1)
         lock_box = ttk.LabelFrame(flow_assist_box, text="1 选择与锁定", padding=6)
         lock_box.pack(fill="x", pady=(0, 6))
@@ -497,6 +500,7 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
             self.btn_confirm_segment: "取消当前锁定的河道、出口和预览，选错时使用。",
             self.btn_load_confluence_polygon: "加载面状 SHP 作为后续面范围汇流的边界图层，当前阶段只显示边界。",
             self.chk_show_confluence_polygon: "显示或隐藏汇流范围面 SHP 边界。",
+            self.btn_lock_polygon_stream: "将汇流范围面内的 Stream=1 河道像元加入当前锁定骨架，不修改栅格值。",
             self.btn_preview_confluence: "基于已锁定河道，预览周边非河道像元向河道汇流的方向。",
             self.btn_clear_flow_marks: "取消当前锁定的河道、出口和预览，选错时使用。",
             self.btn_apply_flow_preview: "将当前橙色预览结果写入流向栅格。",
@@ -605,9 +609,11 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self.confluence_transformer = self._build_layer_transformer(self.confluence_polygon_layer)
 
     def _build_layer_transformer(self, layer) -> Optional[Transformer]:
+        return self._build_layer_transformer_for_raster(layer, self.get_active_raster())
+
+    def _build_layer_transformer_for_raster(self, layer, raster: Optional[RasterData]) -> Optional[Transformer]:
         if not CRS or not Transformer or not layer:
             return None
-        raster = self.get_active_raster()
         if raster is None or not raster.crs_text.strip() or not layer.crs_text.strip():
             return None
         if raster.crs_text.strip() == layer.crs_text.strip():
@@ -1083,6 +1089,32 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         self._add_locked_flow_cells(cells, reset_outlet=True)
         self.info_var.set(f"已锁定当前选区河道 {len(set(cells))} 个像元，后续只修周边非河道流向。")
 
+    def lock_confluence_polygon_stream_skeleton(self) -> None:
+        if self.stream_raster is None:
+            messagebox.showwarning("提示", "请先加载并订正河道ASC。")
+            return
+        if self.flow_raster is None:
+            messagebox.showwarning("提示", "请先加载流向ASC。")
+            return
+        if self.confluence_polygon_layer is None:
+            messagebox.showwarning("提示", "请先加载汇流范围面SHP。")
+            return
+        if self.stream_raster.nrows != self.flow_raster.nrows or self.stream_raster.ncols != self.flow_raster.ncols:
+            messagebox.showwarning("提示", "河道ASC与流向ASC行列数不一致，不能锁定为同一骨架。")
+            return
+        rings = self._confluence_polygon_rings_for_raster(self.stream_raster)
+        cells = self._collect_stream_cells_in_polygon(rings)
+        if not cells:
+            messagebox.showinfo("提示", "汇流范围内没有找到 Stream=1 河道像元。")
+            return
+        unique_count = len(set(cells))
+        if unique_count > 50000:
+            ok = messagebox.askyesno("确认锁定", f"汇流范围内找到 {unique_count} 个河道像元，锁定后可能影响预览性能。是否继续？")
+            if not ok:
+                return
+        self._add_locked_flow_cells(cells, reset_outlet=True)
+        self.info_var.set(f"已锁定汇流范围内河道 {unique_count} 个像元。请右键选择出口后预览河道流向。")
+
     def add_selected_stream_cell_to_lock(self) -> None:
         if self.stream_raster is None:
             messagebox.showwarning("提示", "请先加载并订正河道ASC。")
@@ -1183,6 +1215,48 @@ class WaterCorrectionApp(WorkspaceMixin, PaletteMixin, RasterEditingMixin, Editi
         view = stream.data[row0:row1, col0:col1]
         ys, xs = np.where(view == STREAM_VALUE)
         return [(row0 + int(row_offset), col0 + int(col_offset)) for row_offset, col_offset in zip(ys.tolist(), xs.tolist())]
+
+    def _confluence_polygon_rings_for_raster(self, raster: RasterData) -> List[List[Tuple[float, float]]]:
+        layer = self.confluence_polygon_layer
+        if layer is None:
+            return []
+        transformer = self._build_layer_transformer_for_raster(layer, raster)
+        rings: List[List[Tuple[float, float]]] = []
+        for ring in layer.boundaries:
+            transformed: List[Tuple[float, float]] = []
+            for x, y in ring:
+                if transformer is not None:
+                    x, y = transformer.transform(x, y)
+                transformed.append((x, y))
+            if len(transformed) >= 3:
+                rings.append(transformed)
+        return rings
+
+    def _collect_stream_cells_in_polygon(self, rings: List[List[Tuple[float, float]]]) -> List[Tuple[int, int]]:
+        stream = self.stream_raster
+        if stream is None or not rings:
+            return []
+        bounds = rings_bounds(rings)
+        if bounds is None:
+            return []
+        min_x, min_y, max_x, max_y = bounds
+        rows: List[float] = []
+        cols: List[float] = []
+        for x, y in ((min_x, min_y), (min_x, max_y), (max_x, min_y), (max_x, max_y)):
+            row, col = stream.world_to_rc(x, y)
+            rows.append(row)
+            cols.append(col)
+        row0 = max(0, int(math.floor(min(rows))) - 1)
+        row1 = min(stream.nrows, int(math.ceil(max(rows))) + 1)
+        col0 = max(0, int(math.floor(min(cols))) - 1)
+        col1 = min(stream.ncols, int(math.ceil(max(cols))) + 1)
+        candidates = self._collect_stream_cells_in_bounds(row0, row1, col0, col1)
+        inside: List[Tuple[int, int]] = []
+        for row, col in candidates:
+            x, y = stream.rc_to_world(row, col)
+            if point_in_any_ring(x, y, rings):
+                inside.append((row, col))
+        return inside
 
     def _collect_visible_stream_component(
         self,
