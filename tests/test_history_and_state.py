@@ -137,6 +137,21 @@ class HistoryAndStateTests(unittest.TestCase):
         self.assertEqual(state.apply_tool, "river_skeleton")
         self.assertEqual(state.apply_note, "manual segment flow preview")
 
+    def test_flow_preview_dem_score_details_are_preview_scoped(self) -> None:
+        state = FlowPreviewState.create([(1, 1, 4)], label="周边汇流", kind="confluence")
+        state.dem_score_status[(1, 1)] = "uphill"
+        state.dem_score_summary["uphill"] = 1
+        state.dem_score_label = "逆坡冲突 1"
+        state.dem_score_details.append(object())
+
+        fresh = FlowPreviewState.create([(1, 0, 1)], label="河道本体流向", kind="river_skeleton")
+
+        self.assertEqual(state.dem_score_status[(1, 1)], "uphill")
+        self.assertEqual(fresh.dem_score_status, {})
+        self.assertEqual(fresh.dem_score_summary, {})
+        self.assertEqual(fresh.dem_score_label, "")
+        self.assertEqual(fresh.dem_score_details, [])
+
     def test_legacy_flow_preview_properties_update_state_object(self) -> None:
         app = FlowStateHarness()
 

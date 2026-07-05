@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 FlowCell = Tuple[int, int]
@@ -21,6 +21,7 @@ class FlowPreviewState:
     dem_score_status: Dict[FlowCell, str] = field(default_factory=dict)
     dem_score_summary: Dict[str, int] = field(default_factory=dict)
     dem_score_label: str = ""
+    dem_score_details: List[Any] = field(default_factory=list)
 
     @classmethod
     def create(

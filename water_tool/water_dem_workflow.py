@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import queue
 import threading
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -27,6 +29,7 @@ class DemWorkflowMixin:
         self.dem_cache_data_path: Optional[Path] = None
         self.dem_cache_meta_path: Optional[Path] = None
         self.dem_score_status_text = "未评估"
+        self._dem_conflict_cursor = -1
         self._dem_cache_thread: Optional[threading.Thread] = None
         self._dem_cache_cancel = threading.Event()
         self._dem_cache_queue: "queue.Queue[Tuple[object, ...]]" = queue.Queue()
@@ -47,6 +50,7 @@ class DemWorkflowMixin:
             self.dem_cache_status_var.set("未生成")
         if hasattr(self, "dem_score_status_var"):
             self.dem_score_status_var.set("未评估")
+        self._dem_conflict_cursor = -1
         self._refresh_dem_controls()
 
     def load_dem_dialog(self) -> None:
@@ -70,6 +74,7 @@ class DemWorkflowMixin:
         self.dem_cache_data_path = None
         self.dem_cache_meta_path = None
         self.dem_score_status_var.set("未评估")
+        self._dem_conflict_cursor = -1
         self.dem_file_var.set(
             f"{self._store_path(path)} | {meta.width}x{meta.height} | {meta.crs_text or '无CRS'} | {meta.resolution[0]:.3g}x{meta.resolution[1]:.3g}"
         )
@@ -220,9 +225,13 @@ class DemWorkflowMixin:
         has_locked = bool(self._locked_flow_cells_set()) if hasattr(self, "confirmed_flow_segment_cells") else False
         has_cache = self.dem_cache_arrays is not None and self.dem_cache_metadata is not None
         has_preview = self.flow_preview_state.has_preview() if hasattr(self, "flow_preview_state") else False
+        has_scores = bool(getattr(self.flow_preview_state, "dem_score_details", [])) if hasattr(self, "flow_preview_state") else False
+        has_conflicts = bool(self._dem_conflict_scores()) if has_scores else False
         self.btn_load_dem.configure(state="disabled" if running else "normal")
         self.btn_build_dem_cache.configure(state="normal" if has_dem and has_locked and not running else "disabled")
         self.btn_evaluate_dem_preview.configure(state="normal" if has_cache and has_preview and not running else "disabled")
+        self.btn_locate_dem_conflict.configure(state="normal" if has_conflicts and not running else "disabled")
+        self.btn_export_dem_report.configure(state="normal" if has_scores and not running else "disabled")
         self.btn_cancel_dem_cache.configure(state="normal" if running else "disabled")
 
     def evaluate_current_flow_preview_with_dem(self) -> None:
@@ -246,11 +255,74 @@ class DemWorkflowMixin:
         preview.dem_score_status = {(score.row, score.col): score.status for score in scores}
         preview.dem_score_summary = summary
         preview.dem_score_label = self._format_dem_score_summary(summary)
+        preview.dem_score_details = list(scores)
+        self._dem_conflict_cursor = -1
         self.dem_score_status_var.set(preview.dem_score_label)
         self.info_var.set(f"DEM评估完成：{preview.dem_score_label}")
         self._update_flow_assist_text()
         self._refresh_flow_controls()
         self.render(full=False)
+
+    def locate_next_dem_conflict(self) -> None:
+        conflicts = self._dem_conflict_scores()
+        if not conflicts:
+            messagebox.showinfo("提示", "当前 DEM 评估没有逆坡冲突像元。")
+            return
+        self._dem_conflict_cursor = (self._dem_conflict_cursor + 1) % len(conflicts)
+        score = conflicts[self._dem_conflict_cursor]
+        if self.mode_var.get() != "flow":
+            self.mode_var.set("flow")
+            self.on_tool_changed()
+        self.selected_flow_cell = (score.row, score.col)
+        self.selected_flow_region = None
+        raster = self.flow_raster
+        if raster is not None:
+            zoom = max(0.1, min(float(self.zoom_var.get()), 16.0))
+            self.zoom_var.set(round(zoom, 3))
+            self._set_viewport_center(
+                score.row + 0.5,
+                score.col + 0.5,
+                zoom,
+                max(1, self.canvas.winfo_width()),
+                max(1, self.canvas.winfo_height()),
+            )
+        drop_text = "" if score.drop is None else f"，高程差 {score.drop:.2f}"
+        self.info_var.set(f"逆坡冲突 {self._dem_conflict_cursor + 1}/{len(conflicts)}：像元 ({score.row}, {score.col})，方向 {score.code}{drop_text}")
+        self.render(full=False)
+
+    def export_dem_score_report(self) -> None:
+        scores = list(getattr(self.flow_preview_state, "dem_score_details", []))
+        if not scores:
+            messagebox.showinfo("提示", "当前没有 DEM 评估结果可导出。")
+            return
+        default_name = f"dem_preview_report_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        path = filedialog.asksaveasfilename(
+            title="导出DEM评估报告",
+            defaultextension=".csv",
+            initialdir=str(self.workspace_dir),
+            initialfile=default_name,
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        out_path = Path(path)
+        with out_path.open("w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["row", "col", "direction_code", "status", "current_elevation", "next_elevation", "drop", "reason"])
+            for score in scores:
+                writer.writerow(
+                    [
+                        score.row,
+                        score.col,
+                        score.code,
+                        self._dem_score_status_text(score.status),
+                        "" if score.current_elevation is None else f"{score.current_elevation:.6g}",
+                        "" if score.next_elevation is None else f"{score.next_elevation:.6g}",
+                        "" if score.drop is None else f"{score.drop:.6g}",
+                        score.reason,
+                    ]
+                )
+        self.info_var.set(f"已导出 DEM 评估报告：{out_path.name}")
 
     def _format_dem_score_summary(self, summary) -> str:
         return (
@@ -259,6 +331,17 @@ class DemWorkflowMixin:
             f"逆坡冲突 {int(summary.get('uphill', 0))}，"
             f"无DEM {int(summary.get('no_data', 0))}"
         )
+
+    def _dem_conflict_scores(self):
+        return [score for score in getattr(self.flow_preview_state, "dem_score_details", []) if getattr(score, "status", "") == "uphill"]
+
+    def _dem_score_status_text(self, status: str) -> str:
+        return {
+            "downhill": "顺坡",
+            "flat": "近似平坦",
+            "uphill": "逆坡冲突",
+            "no_data": "无DEM",
+        }.get(status, status)
 
     def _dem_cache_range_for_locked_cells(self, raster: RasterData, locked_cells) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         rows = [row for row, _col in locked_cells]
