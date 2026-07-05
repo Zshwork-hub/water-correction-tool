@@ -19,6 +19,10 @@ except Exception:  # pragma: no cover - rasterio is optional until V2.3 UI integ
 
 Bounds = Tuple[float, float, float, float]
 
+DEFAULT_DEM_WARNING_PIXELS = 5_000_000
+DEFAULT_DEM_MAX_PIXELS = 30_000_000
+DEFAULT_DEM_HARD_MAX_PIXELS = 100_000_000
+
 
 @dataclass(frozen=True)
 class DemMetadata:
@@ -42,12 +46,16 @@ class DemWindowPlan:
     window: Optional[Window]
     pixel_count: int
     max_pixels: int
+    warning_pixels: int
+    hard_max_pixels: int
     too_large: bool
+    hard_blocked: bool
+    warning: bool
     reason: str = ""
 
     @property
     def readable(self) -> bool:
-        return self.window is not None and not self.too_large and self.pixel_count > 0
+        return self.window is not None and not self.too_large and not self.hard_blocked and self.pixel_count > 0
 
 
 @dataclass(frozen=True)
@@ -111,23 +119,74 @@ def plan_dem_window(
     dem_path: Path,
     source_bounds: Bounds,
     source_crs_text: str = "EPSG:4326",
-    max_pixels: int = 5_000_000,
+    max_pixels: int = DEFAULT_DEM_MAX_PIXELS,
+    warning_pixels: int = DEFAULT_DEM_WARNING_PIXELS,
+    hard_max_pixels: int = DEFAULT_DEM_HARD_MAX_PIXELS,
     buffer_dem_pixels: int = 0,
 ) -> DemWindowPlan:
     require_rasterio()
+    max_pixels = int(max_pixels)
+    warning_pixels = int(warning_pixels)
+    hard_max_pixels = int(hard_max_pixels)
+    effective_max_pixels = min(max_pixels, hard_max_pixels)
     with rasterio.open(dem_path) as ds:
         if ds.crs is None:
-            return DemWindowPlan(source_bounds, source_bounds, None, 0, max_pixels, True, "DEM 缺少 CRS")
+            return DemWindowPlan(
+                source_bounds,
+                source_bounds,
+                None,
+                0,
+                max_pixels,
+                warning_pixels,
+                hard_max_pixels,
+                True,
+                False,
+                False,
+                "DEM 缺少 CRS",
+            )
         dem_bounds = transform_bounds_to_dem(source_bounds, source_crs_text, ds.crs.to_string())
         raw_window = from_bounds(*dem_bounds, transform=ds.transform)
         window = _round_and_buffer_window(raw_window, int(buffer_dem_pixels))
         clipped = _clip_window(window, ds.width, ds.height)
         if clipped is None:
-            return DemWindowPlan(source_bounds, dem_bounds, None, 0, max_pixels, False, "范围与 DEM 无交集")
+            return DemWindowPlan(
+                source_bounds,
+                dem_bounds,
+                None,
+                0,
+                max_pixels,
+                warning_pixels,
+                hard_max_pixels,
+                False,
+                False,
+                False,
+                "范围与 DEM 无交集",
+            )
         pixel_count = int(math.ceil(clipped.width) * math.ceil(clipped.height))
-        too_large = pixel_count > int(max_pixels)
-        reason = f"DEM window 像元 {pixel_count} 超过上限 {max_pixels}" if too_large else ""
-        return DemWindowPlan(source_bounds, dem_bounds, clipped, pixel_count, int(max_pixels), too_large, reason)
+        hard_blocked = pixel_count > hard_max_pixels
+        too_large = pixel_count > effective_max_pixels
+        warning = warning_pixels > 0 and pixel_count > warning_pixels and not too_large and not hard_blocked
+        if hard_blocked:
+            reason = f"DEM window 像元 {pixel_count} 超过硬上限 {hard_max_pixels}"
+        elif too_large:
+            reason = f"DEM window 像元 {pixel_count} 超过当前上限 {effective_max_pixels}"
+        elif warning:
+            reason = f"DEM window 像元 {pixel_count} 超过提示阈值 {warning_pixels}，建议确认后读取"
+        else:
+            reason = ""
+        return DemWindowPlan(
+            source_bounds,
+            dem_bounds,
+            clipped,
+            pixel_count,
+            max_pixels,
+            warning_pixels,
+            hard_max_pixels,
+            too_large,
+            hard_blocked,
+            warning,
+            reason,
+        )
 
 
 def summarize_dem_window(dem_path: Path, window: Window) -> DemWindowSummary:

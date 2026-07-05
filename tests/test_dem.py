@@ -59,7 +59,32 @@ class DemSupportTests(unittest.TestCase):
             too_large = plan_dem_window(path, (0, 0, 10, 10), max_pixels=50)
             self.assertFalse(too_large.readable)
             self.assertTrue(too_large.too_large)
-            self.assertIn("超过上限", too_large.reason)
+            self.assertIn("超过当前上限", too_large.reason)
+
+    def test_plan_dem_window_warns_before_default_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tiny.tif"
+            self._write_tiny_dem(path)
+
+            plan = plan_dem_window(path, (0, 0, 10, 10), warning_pixels=50, max_pixels=200, hard_max_pixels=500)
+
+            self.assertTrue(plan.readable)
+            self.assertFalse(plan.too_large)
+            self.assertFalse(plan.hard_blocked)
+            self.assertTrue(plan.warning)
+            self.assertIn("提示阈值", plan.reason)
+
+    def test_plan_dem_window_blocks_hard_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tiny.tif"
+            self._write_tiny_dem(path)
+
+            plan = plan_dem_window(path, (0, 0, 10, 10), warning_pixels=10, max_pixels=200, hard_max_pixels=80)
+
+            self.assertFalse(plan.readable)
+            self.assertTrue(plan.too_large)
+            self.assertTrue(plan.hard_blocked)
+            self.assertIn("硬上限", plan.reason)
 
     def test_summarize_dem_window_ignores_nodata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
