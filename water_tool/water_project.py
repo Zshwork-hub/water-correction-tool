@@ -48,6 +48,9 @@ def rebuild_raster(payload: Dict[str, object], data: np.ndarray, resolve_path: P
     if not isinstance(path_value, str) or not isinstance(header_value, list):
         return None
     header = parse_asc_header_lines([str(line) for line in header_value])
+    expected_shape = (int(header.values["nrows"]), int(header.values["ncols"]))
+    if tuple(data.shape) != expected_shape:
+        return None
     crs_text = str(payload.get("crs_text", ""))
     return RasterData(resolve_path(path_value), header, data.astype(np.int32), crs_text)
 
