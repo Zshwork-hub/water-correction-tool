@@ -1463,10 +1463,11 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         return Image.alpha_composite(image, overlay)
 
     def _draw_flow_preview_overlay(self, overlay: Image.Image, raster: RasterData, zoom: float) -> None:
-        if not self.flow_preview_kind or (not self.flow_preview_ops and not self.flow_preview_unchanged_ops):
+        preview = self.flow_preview_state
+        if not preview.has_preview():
             return
         draw = ImageDraw.Draw(overlay)
-        for row, col, code in self.flow_preview_unchanged_ops:
+        for row, col, code in preview.unchanged_ops:
             self._draw_flow_preview_cell(
                 draw,
                 overlay,
@@ -1480,7 +1481,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
                 arrow=self.assist_palette["preview_same_arrow"],
                 width_scale=9.0,
             )
-        for row, col, code in self.flow_preview_ops:
+        for row, col, code in preview.ops:
             self._draw_flow_preview_cell(
                 draw,
                 overlay,

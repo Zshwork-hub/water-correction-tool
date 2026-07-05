@@ -34,8 +34,8 @@ class UIStateMixin:
     def _refresh_flow_controls(self) -> None:
         has_flow_data = self.stream_raster is not None and self.flow_raster is not None
         locked_ready = bool(self.confirmed_flow_segments)
-        apply_ready = bool(self.flow_preview_kind and self.flow_preview_ops)
-        preview_ready = bool(self.flow_preview_kind and (self.flow_preview_ops or self.flow_preview_unchanged_ops))
+        apply_ready = self.flow_preview_state.has_apply_ops()
+        preview_ready = self.flow_preview_state.has_preview()
         apply_text = self._flow_apply_button_text()
 
         def state(enabled: bool) -> str:
@@ -59,7 +59,7 @@ class UIStateMixin:
         self.update_mode_status()
 
     def on_river_flow_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
-        if self.flow_preview_kind == "river_skeleton":
+        if self.flow_preview_state.kind == "river_skeleton":
             self._reset_flow_preview_state()
             self._update_flow_assist_text()
             self._refresh_flow_controls()
@@ -67,7 +67,7 @@ class UIStateMixin:
             self.info_var.set("河道流向计算模式已切换，请重新点击“预览河道流向”。")
 
     def on_confluence_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
-        if self.flow_preview_kind == "confluence":
+        if self.flow_preview_state.kind == "confluence":
             self._reset_flow_preview_state()
             self.render(full=True)
         self._update_confluence_hint()

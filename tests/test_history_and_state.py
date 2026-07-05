@@ -91,6 +91,67 @@ class FlowStateHarness(FlowStateMixin):
 
 
 class HistoryAndStateTests(unittest.TestCase):
+    def test_flow_preview_state_exposes_preview_metadata(self) -> None:
+        state = FlowPreviewState.create(
+            [(1, 1, 4), (1, 2, 8)],
+            [(2, 2, 16)],
+            label="河道本体流向",
+            kind="river_skeleton",
+            segment_key=((1, 1), (2, 2)),
+        )
+
+        self.assertTrue(state.has_preview())
+        self.assertTrue(state.has_apply_ops())
+        self.assertEqual(state.change_count, 2)
+        self.assertEqual(state.unchanged_count, 1)
+        self.assertEqual(state.apply_button_text(), "应用河道流向")
+        self.assertEqual(state.apply_tool, "river_skeleton")
+        self.assertEqual(state.apply_note, "locked river skeleton flow")
+        self.assertEqual(state.status_label(), "河道流向预览")
+        self.assertIn("修改 2", state.applied_message(2))
+
+    def test_flow_preview_state_handles_unchanged_only_preview(self) -> None:
+        state = FlowPreviewState.create(
+            [],
+            [(2, 2, 16)],
+            label="范围SHP汇流",
+            kind="confluence",
+        )
+
+        self.assertTrue(state.has_preview())
+        self.assertFalse(state.has_apply_ops())
+        self.assertEqual(state.change_count, 0)
+        self.assertEqual(state.unchanged_count, 1)
+        self.assertEqual(state.apply_button_text(), "应用周边汇流")
+        self.assertEqual(state.apply_tool, "manual_assist")
+        self.assertEqual(state.apply_note, "manual confluence flow preview")
+
+    def test_flow_preview_segment_uses_river_apply_path(self) -> None:
+        state = FlowPreviewState.create(
+            [(1, 1, 4)],
+            label="河段预览",
+            kind="segment",
+        )
+
+        self.assertEqual(state.apply_button_text(), "应用河道流向")
+        self.assertEqual(state.apply_tool, "river_skeleton")
+        self.assertEqual(state.apply_note, "manual segment flow preview")
+
+    def test_legacy_flow_preview_properties_update_state_object(self) -> None:
+        app = FlowStateHarness()
+
+        app.flow_preview_ops = [(1, 1, 4)]
+        app.flow_preview_unchanged_ops = [(1, 0, 1)]
+        app.flow_preview_kind = "river_skeleton"
+        app.flow_preview_segment_key = ((0, 0), (1, 1))
+
+        self.assertEqual(app.flow_preview_state.ops, [(1, 1, 4)])
+        self.assertEqual(app.flow_preview_state.unchanged_ops, [(1, 0, 1)])
+        self.assertEqual(app.flow_preview_state.kind, "river_skeleton")
+        self.assertEqual(app.flow_preview_state.apply_tool, "river_skeleton")
+        self.assertEqual(app.flow_preview_state.apply_note, "locked river skeleton flow")
+        self.assertEqual(app.flow_preview_state.segment_key, ((0, 0), (1, 1)))
+
     def test_snapshot_restore_is_undoable_and_redoable(self) -> None:
         app = HistoryHarness()
 

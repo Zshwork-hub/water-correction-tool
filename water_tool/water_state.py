@@ -13,8 +13,100 @@ FlowSegmentKey = Tuple[FlowCell, FlowCell]
 class FlowPreviewState:
     ops: List[FlowOp] = field(default_factory=list)
     unchanged_ops: List[FlowOp] = field(default_factory=list)
+    label: str = ""
     kind: str = ""
     segment_key: Optional[FlowSegmentKey] = None
+    apply_tool: str = ""
+    apply_note: str = ""
+
+    @classmethod
+    def create(
+        cls,
+        ops: List[FlowOp],
+        unchanged_ops: Optional[List[FlowOp]] = None,
+        label: str = "",
+        kind: str = "",
+        segment_key: Optional[FlowSegmentKey] = None,
+    ) -> "FlowPreviewState":
+        state = cls(
+            ops=list(ops),
+            unchanged_ops=list(unchanged_ops or []),
+            label=label,
+            kind=kind,
+            segment_key=segment_key,
+        )
+        state.apply_tool = state.default_apply_tool()
+        state.apply_note = state.default_apply_note()
+        return state
+
+    @property
+    def change_count(self) -> int:
+        return len(self.ops)
+
+    @property
+    def unchanged_count(self) -> int:
+        return len(self.unchanged_ops)
+
+    def has_apply_ops(self) -> bool:
+        return bool(self.kind and self.ops)
+
+    def has_preview(self) -> bool:
+        return bool(self.kind and (self.ops or self.unchanged_ops))
+
+    def display_label(self) -> str:
+        if self.label:
+            return self.label
+        if self.kind == "river_skeleton":
+            return "河道本体流向"
+        if self.kind == "confluence":
+            return "周边汇流"
+        if self.kind == "segment":
+            return "河段预览"
+        return "流向预览"
+
+    def status_label(self) -> str:
+        if self.kind == "river_skeleton":
+            return "河道流向预览"
+        if self.kind == "confluence":
+            return "周边汇流预览"
+        if self.kind == "segment":
+            return "河段预览"
+        return self.display_label()
+
+    def assist_label(self) -> str:
+        if self.kind in {"river_skeleton", "segment"}:
+            return "河道预览"
+        if self.kind == "confluence":
+            return "周边预览"
+        return "流向预览"
+
+    def apply_button_text(self) -> str:
+        if self.kind in {"river_skeleton", "segment"}:
+            return "应用河道流向"
+        if self.kind == "confluence":
+            return "应用周边汇流"
+        return "应用预览"
+
+    def default_apply_tool(self) -> str:
+        if self.kind in {"river_skeleton", "segment"}:
+            return "river_skeleton"
+        return "manual_assist"
+
+    def default_apply_note(self) -> str:
+        if self.kind == "river_skeleton":
+            return "locked river skeleton flow"
+        if self.kind == "confluence":
+            return "manual confluence flow preview"
+        if self.kind == "segment":
+            return "manual segment flow preview"
+        return "manual flow assist preview"
+
+    def applied_message(self, count: int) -> str:
+        if self.kind == "river_skeleton":
+            return f"已应用河道本体流向预览，修改 {count} 个河道像元；已切换到订正流向模式"
+        if self.kind == "segment":
+            return f"已应用河段流向预览，修改 {count} 个像元；已切换到订正流向模式"
+        return f"已应用周边汇流预览，修改 {count} 个像元；已切换到订正流向模式"
 
 
 class FlowStateMixin:
@@ -41,6 +133,8 @@ class FlowStateMixin:
     @flow_preview_kind.setter
     def flow_preview_kind(self, value: str) -> None:
         self.flow_preview_state.kind = value
+        self.flow_preview_state.apply_tool = self.flow_preview_state.default_apply_tool()
+        self.flow_preview_state.apply_note = self.flow_preview_state.default_apply_note()
 
     @property
     def flow_preview_segment_key(self) -> Optional[FlowSegmentKey]:
