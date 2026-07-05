@@ -9,7 +9,14 @@ from typing import Optional, Tuple
 from tkinter import filedialog, messagebox
 
 from .water_core import RasterData
-from .water_dem import DemCacheCancelled, build_dem_cache, read_dem_metadata, save_dem_cache
+from .water_dem import (
+    DemCacheCancelled,
+    build_dem_cache,
+    read_dem_metadata,
+    save_dem_cache,
+    score_flow_directions_from_cache,
+    summarize_dem_direction_scores,
+)
 
 
 class DemWorkflowMixin:
@@ -19,6 +26,7 @@ class DemWorkflowMixin:
         self.dem_cache_metadata = None
         self.dem_cache_data_path: Optional[Path] = None
         self.dem_cache_meta_path: Optional[Path] = None
+        self.dem_score_status_text = "未评估"
         self._dem_cache_thread: Optional[threading.Thread] = None
         self._dem_cache_cancel = threading.Event()
         self._dem_cache_queue: "queue.Queue[Tuple[object, ...]]" = queue.Queue()
@@ -37,6 +45,8 @@ class DemWorkflowMixin:
             self.dem_file_var.set("未加载")
         if hasattr(self, "dem_cache_status_var"):
             self.dem_cache_status_var.set("未生成")
+        if hasattr(self, "dem_score_status_var"):
+            self.dem_score_status_var.set("未评估")
         self._refresh_dem_controls()
 
     def load_dem_dialog(self) -> None:
@@ -59,6 +69,7 @@ class DemWorkflowMixin:
         self.dem_cache_metadata = None
         self.dem_cache_data_path = None
         self.dem_cache_meta_path = None
+        self.dem_score_status_var.set("未评估")
         self.dem_file_var.set(
             f"{self._store_path(path)} | {meta.width}x{meta.height} | {meta.crs_text or '无CRS'} | {meta.resolution[0]:.3g}x{meta.resolution[1]:.3g}"
         )
@@ -180,6 +191,7 @@ class DemWorkflowMixin:
                 self.dem_cache_status_var.set(
                     f"缓存完成：{stats.get('readable_cells', result.readable_cells)}/{stats.get('processed_cells', result.processed_cells)} 可读，{Path(data_path).name}"
                 )
+                self.dem_score_status_var.set("缓存已就绪，可评估当前流向预览")
                 self.info_var.set(f"DEM缓存已生成：{Path(data_path).name}")
                 keep_polling = False
             elif kind == "cancelled":
@@ -206,9 +218,47 @@ class DemWorkflowMixin:
         running = self._dem_cache_is_running()
         has_dem = self.dem_path is not None
         has_locked = bool(self._locked_flow_cells_set()) if hasattr(self, "confirmed_flow_segment_cells") else False
+        has_cache = self.dem_cache_arrays is not None and self.dem_cache_metadata is not None
+        has_preview = self.flow_preview_state.has_preview() if hasattr(self, "flow_preview_state") else False
         self.btn_load_dem.configure(state="disabled" if running else "normal")
         self.btn_build_dem_cache.configure(state="normal" if has_dem and has_locked and not running else "disabled")
+        self.btn_evaluate_dem_preview.configure(state="normal" if has_cache and has_preview and not running else "disabled")
         self.btn_cancel_dem_cache.configure(state="normal" if running else "disabled")
+
+    def evaluate_current_flow_preview_with_dem(self) -> None:
+        preview = self.flow_preview_state
+        if not preview.has_preview():
+            messagebox.showwarning("提示", "请先生成河道流向或周边汇流预览。")
+            return
+        if self.dem_cache_arrays is None or self.dem_cache_metadata is None:
+            messagebox.showwarning("提示", "请先生成当前锁定范围的DEM缓存。")
+            return
+        all_ops = list(preview.ops) + list(preview.unchanged_ops)
+        if not all_ops:
+            messagebox.showwarning("提示", "当前预览没有可评估的像元。")
+            return
+        try:
+            scores = score_flow_directions_from_cache(self.dem_cache_arrays, self.dem_cache_metadata, all_ops)
+        except Exception as exc:
+            messagebox.showerror("DEM评估失败", str(exc))
+            return
+        summary = summarize_dem_direction_scores(scores)
+        preview.dem_score_status = {(score.row, score.col): score.status for score in scores}
+        preview.dem_score_summary = summary
+        preview.dem_score_label = self._format_dem_score_summary(summary)
+        self.dem_score_status_var.set(preview.dem_score_label)
+        self.info_var.set(f"DEM评估完成：{preview.dem_score_label}")
+        self._update_flow_assist_text()
+        self._refresh_flow_controls()
+        self.render(full=False)
+
+    def _format_dem_score_summary(self, summary) -> str:
+        return (
+            f"顺坡 {int(summary.get('downhill', 0))}，"
+            f"近似平坦 {int(summary.get('flat', 0))}，"
+            f"逆坡冲突 {int(summary.get('uphill', 0))}，"
+            f"无DEM {int(summary.get('no_data', 0))}"
+        )
 
     def _dem_cache_range_for_locked_cells(self, raster: RasterData, locked_cells) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         rows = [row for row, _col in locked_cells]

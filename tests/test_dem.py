@@ -19,7 +19,9 @@ from water_tool.water_dem import (
     raster_cell_bounds,
     read_dem_metadata,
     save_dem_cache,
+    score_flow_directions_from_cache,
     summarize_dem_for_raster_cells,
+    summarize_dem_direction_scores,
     summarize_dem_window,
     transform_bounds_to_dem,
 )
@@ -298,6 +300,42 @@ class DemSupportTests(unittest.TestCase):
                     cancel_checker=lambda: should_cancel["value"],
                     progress_interval_cells=2,
                 )
+
+    def test_score_flow_directions_from_cache(self) -> None:
+        arrays = {
+            "median": np.array(
+                [
+                    [100.0, 90.0, 90.4],
+                    [110.0, 95.0, np.nan],
+                ],
+                dtype=np.float32,
+            ),
+            "readable": np.array(
+                [
+                    [1, 1, 1],
+                    [1, 1, 0],
+                ],
+                dtype=np.uint8,
+            ),
+        }
+        metadata = {"window": {"row0": 10, "row1": 12, "col0": 20, "col1": 23}}
+        ops = [
+            (10, 20, 1),   # east, 100 -> 90
+            (10, 21, 1),   # east, 90 -> 90.4
+            (10, 21, 4),   # south, 90 -> 95
+            (10, 22, 4),   # south, target unreadable
+            (9, 20, 1),    # outside cache
+        ]
+
+        scores = score_flow_directions_from_cache(arrays, metadata, ops, flat_tolerance=1.0)
+        summary = summarize_dem_direction_scores(scores)
+
+        self.assertEqual([score.status for score in scores], ["downhill", "flat", "uphill", "no_data", "no_data"])
+        self.assertAlmostEqual(scores[0].drop or 0.0, 10.0)
+        self.assertEqual(summary["downhill"], 1)
+        self.assertEqual(summary["flat"], 1)
+        self.assertEqual(summary["uphill"], 1)
+        self.assertEqual(summary["no_data"], 2)
 
 
 if __name__ == "__main__":

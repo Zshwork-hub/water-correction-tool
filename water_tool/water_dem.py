@@ -9,7 +9,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 from pyproj import CRS, Transformer
 
-from .water_core import RasterData
+from .water_core import DIR_OFFSETS, RasterData
 
 try:
     import rasterio
@@ -95,6 +95,18 @@ class DemCellSummary:
     max_elevation: Optional[float]
     mean_elevation: Optional[float]
     median_elevation: Optional[float]
+
+
+@dataclass(frozen=True)
+class DemDirectionScore:
+    row: int
+    col: int
+    code: int
+    status: str
+    current_elevation: Optional[float]
+    next_elevation: Optional[float]
+    drop: Optional[float]
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -486,6 +498,34 @@ def dem_cache_matches(
     return True
 
 
+def score_flow_directions_from_cache(
+    arrays: Dict[str, np.ndarray],
+    metadata: Dict[str, object],
+    flow_ops: Iterable[Tuple[int, int, int]],
+    flat_tolerance: float = 1.0,
+) -> List[DemDirectionScore]:
+    window = metadata.get("window", {})
+    if not isinstance(window, dict):
+        raise ValueError("DEM 缓存元数据缺少 window。")
+    row0 = int(window.get("row0", 0))
+    col0 = int(window.get("col0", 0))
+    median = arrays.get("median")
+    readable = arrays.get("readable")
+    if median is None:
+        raise ValueError("DEM 缓存缺少 median 数组。")
+    scores: List[DemDirectionScore] = []
+    for row, col, code in flow_ops:
+        scores.append(_score_one_flow_direction(median, readable, row0, col0, int(row), int(col), int(code), float(flat_tolerance)))
+    return scores
+
+
+def summarize_dem_direction_scores(scores: Iterable[DemDirectionScore]) -> Dict[str, int]:
+    summary = {"downhill": 0, "flat": 0, "uphill": 0, "no_data": 0}
+    for score in scores:
+        summary[score.status] = summary.get(score.status, 0) + 1
+    return summary
+
+
 def _empty_cell_summary(
     row: int,
     col: int,
@@ -524,6 +564,56 @@ def _empty_cache_arrays(height: int, width: int) -> Dict[str, np.ndarray]:
         "readable": np.zeros(shape, dtype=np.uint8),
         "warning": np.zeros(shape, dtype=np.uint8),
     }
+
+
+def _score_one_flow_direction(
+    median: np.ndarray,
+    readable: Optional[np.ndarray],
+    row0: int,
+    col0: int,
+    row: int,
+    col: int,
+    code: int,
+    flat_tolerance: float,
+) -> DemDirectionScore:
+    offset = DIR_OFFSETS.get(code)
+    if offset is None:
+        return DemDirectionScore(row, col, code, "no_data", None, None, None, "无效D8方向")
+    current = _cache_elevation_at(median, readable, row0, col0, row, col)
+    if current is None:
+        return DemDirectionScore(row, col, code, "no_data", None, None, None, "当前像元无DEM缓存")
+    dr, dc = offset
+    next_row = row + dr
+    next_col = col + dc
+    nxt = _cache_elevation_at(median, readable, row0, col0, next_row, next_col)
+    if nxt is None:
+        return DemDirectionScore(row, col, code, "no_data", current, None, None, "目标像元无DEM缓存")
+    drop = current - nxt
+    if drop > flat_tolerance:
+        return DemDirectionScore(row, col, code, "downhill", current, nxt, drop, "方向顺坡")
+    if drop < -flat_tolerance:
+        return DemDirectionScore(row, col, code, "uphill", current, nxt, drop, "方向逆坡")
+    return DemDirectionScore(row, col, code, "flat", current, nxt, drop, "高程差接近平坦")
+
+
+def _cache_elevation_at(
+    median: np.ndarray,
+    readable: Optional[np.ndarray],
+    row0: int,
+    col0: int,
+    row: int,
+    col: int,
+) -> Optional[float]:
+    local_row = row - row0
+    local_col = col - col0
+    if local_row < 0 or local_col < 0 or local_row >= median.shape[0] or local_col >= median.shape[1]:
+        return None
+    if readable is not None and readable.shape == median.shape and int(readable[local_row, local_col]) == 0:
+        return None
+    value = float(median[local_row, local_col])
+    if not np.isfinite(value):
+        return None
+    return value
 
 
 def _normalize_range(value: Optional[Tuple[int, int]], limit: int) -> Tuple[int, int]:

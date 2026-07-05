@@ -68,6 +68,49 @@ class FlowRenderMixin:
                 arrow=self.assist_palette["preview_change_arrow"],
                 width_scale=7.0,
             )
+        self._draw_dem_score_overlay(draw, overlay, raster, zoom, preview.dem_score_status)
+
+    def _draw_dem_score_overlay(
+        self,
+        draw: ImageDraw.ImageDraw,
+        overlay: Image.Image,
+        raster: RasterData,
+        zoom: float,
+        dem_score_status,
+    ) -> None:
+        if not dem_score_status:
+            return
+        colors = {
+            "downhill": (35, 165, 80, 245),
+            "flat": (240, 185, 35, 245),
+            "uphill": (220, 45, 45, 250),
+            "no_data": (120, 120, 120, 220),
+        }
+        outlines = {
+            "downhill": (8, 90, 40, 255),
+            "flat": (135, 95, 10, 255),
+            "uphill": (125, 15, 15, 255),
+            "no_data": (65, 65, 65, 255),
+        }
+        radius = max(2, int(round(min(7.0, max(3.0, zoom * 0.22)))))
+        for (row, col), status in dem_score_status.items():
+            if not (0 <= row < raster.nrows and 0 <= col < raster.ncols):
+                continue
+            x0 = int(math.floor(col * zoom - self._view_x))
+            y0 = int(math.floor(row * zoom - self._view_y))
+            x1 = max(x0 + 1, int(math.ceil((col + 1) * zoom - self._view_x)))
+            y1 = max(y0 + 1, int(math.ceil((row + 1) * zoom - self._view_y)))
+            if x1 < 0 or y1 < 0 or x0 >= overlay.size[0] or y0 >= overlay.size[1]:
+                continue
+            if x1 - x0 >= radius * 3 and y1 - y0 >= radius * 3:
+                cx = x1 - radius - 2
+                cy = y0 + radius + 2
+            else:
+                cx = (x0 + x1) / 2
+                cy = (y0 + y1) / 2
+            fill = colors.get(status, colors["no_data"])
+            outline = outlines.get(status, outlines["no_data"])
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=fill, outline=outline, width=1)
 
     def _draw_flow_preview_cell(
         self,

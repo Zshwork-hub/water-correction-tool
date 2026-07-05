@@ -93,6 +93,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.confluence_shp_var = tk.StringVar(value="未加载")
         self.dem_file_var = tk.StringVar(value="未加载")
         self.dem_cache_status_var = tk.StringVar(value="未生成")
+        self.dem_score_status_var = tk.StringVar(value="未评估")
         self.coord_var = tk.StringVar(value="")
         self.confluence_inner_radius_var = tk.IntVar(value=3)
         self.confluence_outer_radius_var = tk.IntVar(value=4)
@@ -507,7 +508,10 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.btn_build_dem_cache.grid(row=0, column=1, sticky="ew", padx=(0, 4))
         self.btn_cancel_dem_cache = ttk.Button(dem_box, text="取消缓存", command=self.cancel_dem_cache_task)
         self.btn_cancel_dem_cache.grid(row=0, column=2, sticky="ew")
-        ttk.Label(dem_box, textvariable=self.dem_cache_status_var, wraplength=320, justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        self.btn_evaluate_dem_preview = ttk.Button(dem_box, text="评估当前预览", command=self.evaluate_current_flow_preview_with_dem)
+        self.btn_evaluate_dem_preview.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Label(dem_box, textvariable=self.dem_cache_status_var, wraplength=320, justify="left").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        ttk.Label(dem_box, textvariable=self.dem_score_status_var, wraplength=320, justify="left").grid(row=3, column=0, columnspan=3, sticky="w", pady=(3, 0))
         for col in range(3):
             dem_box.columnconfigure(col, weight=1)
 
@@ -570,6 +574,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             self.btn_assist_palette: "修改流向预览、框选、锁定河道、源头/节点/出口等辅助标记颜色。",
             self.btn_load_dem: "加载 GeoTIFF DEM。DEM 不作为底图显示，只作为后续流向判断的地形证据。",
             self.btn_build_dem_cache: "为当前已锁定河道的局部外包范围生成 DEM 粗像元缓存，不扫描全国范围。",
+            self.btn_evaluate_dem_preview: "用已生成的 DEM 缓存评估当前流向预览：顺坡、近似平坦、逆坡冲突或无DEM。",
             self.btn_cancel_dem_cache: "取消正在运行的 DEM 缓存任务，取消后不会保存半成品缓存。",
             self.btn_reset_palette: "恢复内置默认颜色，不改变数据和显示开关。",
             self.preset_combo: "选择一个已保存的配色预设。",

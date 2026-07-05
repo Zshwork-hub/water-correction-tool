@@ -11,6 +11,8 @@ class FlowStatusMixin:
         preview = self.flow_preview_state
         if preview.has_preview():
             preview_text = f"{preview.status_label()} 需修改 {preview.change_count} / 已一致 {preview.unchanged_count}"
+            if preview.dem_score_label:
+                preview_text += f"，DEM {preview.dem_score_label}"
         else:
             preview_text = "无预览"
         outlet_text = f"出口 {self.flow_skeleton_outlet}" if self.flow_skeleton_outlet is not None else "未设出口"
@@ -40,6 +42,8 @@ class FlowStatusMixin:
         distance_text = "不限距" if max_distance <= 0 else f"最大距 {max_distance}"
         if preview.has_preview():
             preview_detail = f"{preview.assist_label()} 需修改 {preview.change_count} / 已一致 {preview.unchanged_count}"
+            if preview.dem_score_label:
+                preview_detail += f"  DEM {preview.dem_score_label}"
         else:
             preview_detail = "无预览"
         self.flow_assist_var.set(
