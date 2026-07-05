@@ -205,11 +205,8 @@ class FlowWorkflowMixin:
         self.confirmed_flow_segment_cells[key] = merged
         if reset_outlet:
             self.flow_skeleton_outlet = None
-        self.selected_flow_segment = None
-        self.flow_segment_downstream = None
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_selection_state(clear_cell=False, clear_region=False, clear_segment=True)
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         self._refresh_flow_controls()
         self.render(full=False)
@@ -226,10 +223,8 @@ class FlowWorkflowMixin:
         self.confirmed_flow_segments = {key: cells[-1] for key, cells in new_groups.items() if cells}
         if self.flow_skeleton_outlet in cells_to_remove:
             self.flow_skeleton_outlet = None
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
-        self.selected_flow_region = None
+        self._reset_flow_preview_state()
+        self._reset_flow_selection_state(clear_cell=False, clear_region=True, clear_segment=False)
         self._update_flow_assist_text()
         self._refresh_flow_controls()
         self.render(full=False)
@@ -391,9 +386,7 @@ class FlowWorkflowMixin:
             return
         self.selected_flow_segment = segment
         self.flow_segment_downstream = segment.end if (cell[0] - segment.end[0]) ** 2 + (cell[1] - segment.end[1]) ** 2 <= (cell[0] - segment.start[0]) ** 2 + (cell[1] - segment.start[1]) ** 2 else segment.start
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         self.render(full=False)
 
@@ -407,9 +400,7 @@ class FlowWorkflowMixin:
                 return
         segment = self.selected_flow_segment
         self.flow_segment_downstream = segment.end if (cell[0] - segment.end[0]) ** 2 + (cell[1] - segment.end[1]) ** 2 <= (cell[0] - segment.start[0]) ** 2 + (cell[1] - segment.start[1]) ** 2 else segment.start
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         self.render(full=False)
 
@@ -424,9 +415,7 @@ class FlowWorkflowMixin:
             self.flow_segment_downstream = self.selected_flow_segment.end
         else:
             self.flow_segment_downstream = self.selected_flow_segment.start
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         self.render(full=False)
 
@@ -438,16 +427,9 @@ class FlowWorkflowMixin:
         self.info_var.set("已取消当前锁定河道、出口和预览。")
 
     def _clear_flow_skeleton_state(self) -> None:
-        self.selected_flow_segment = None
-        self.flow_segment_downstream = None
-        self.confirmed_flow_segments.clear()
-        self.confirmed_flow_segment_cells.clear()
-        self.flow_skeleton_outlet = None
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
-        self.selected_flow_region = None
-        self.selected_flow_cell = None
+        self._reset_flow_selection_state()
+        self._reset_flow_lock_state()
+        self._reset_flow_preview_state()
         self._refresh_flow_controls()
 
     def set_flow_skeleton_outlet(self) -> None:
@@ -463,9 +445,7 @@ class FlowWorkflowMixin:
             messagebox.showinfo("提示", "出口必须位于已锁定的河道像元内。")
             return
         self.flow_skeleton_outlet = cell
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         self._refresh_flow_controls()
         self.render(full=False)
@@ -481,7 +461,7 @@ class FlowWorkflowMixin:
         if self.flow_skeleton_outlet is None:
             messagebox.showinfo("提示", "请先右键选中出口像元并点击“设为出口”。")
             return
-        self.flow_preview_ops = []
+        self._reset_flow_preview_state()
         ops = self._build_locked_river_flow_ops(self.flow_skeleton_outlet)
         self._set_flow_preview(ops, "河道本体流向", "river_skeleton", None)
 
@@ -608,9 +588,7 @@ class FlowWorkflowMixin:
         batch = self._apply_flow_ops(ops, "skeleton_lock", "apply and lock skeleton flow")
         self.confirmed_flow_segments[self.selected_flow_segment.edge_key] = downstream
         self.confirmed_flow_segment_cells[self.selected_flow_segment.edge_key] = list(self.selected_flow_segment.cells)
-        self.flow_preview_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         if batch.ops:
             self._record_flow_batch(batch)
@@ -749,10 +727,7 @@ class FlowWorkflowMixin:
             downstream = self.flow_segment_downstream or self.selected_flow_segment.end
             self.confirmed_flow_segments[self.selected_flow_segment.edge_key] = downstream
             self.confirmed_flow_segment_cells[self.selected_flow_segment.edge_key] = list(self.selected_flow_segment.cells)
-        self.flow_preview_ops = []
-        self.flow_preview_unchanged_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         if self.active_mode() != "flow":
             self.mode_var.set("flow")
@@ -819,10 +794,7 @@ class FlowWorkflowMixin:
             self.info_var.set(f"已创建快照 {tag}")
 
     def clear_flow_preview(self) -> None:
-        self.flow_preview_ops = []
-        self.flow_preview_unchanged_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_preview_state()
         self._update_flow_assist_text()
         self._refresh_flow_controls()
         self.render(full=False)

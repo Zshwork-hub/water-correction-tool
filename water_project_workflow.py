@@ -190,13 +190,11 @@ class ProjectWorkflowMixin:
         self.histories = {"stream": [], "flow": []}
         self.redo_stacks = {"stream": [], "flow": []}
         self.snapshots = {"stream": [], "flow": []}
-        self.flow_suggestions = []
         self.current_batch = None
         self._clear_flow_skeleton_state()
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
-        self._flow_network_cache_key = None
-        self._flow_network_cache = None
+        self.flow_suggestions = []
+        self._reset_flow_selection_state()
+        self._invalidate_flow_network_cache()
         self._invalidate_viewport_cache()
 
     def _snapshot_raster_payload(self, raster: Optional[RasterData]) -> Dict[str, object]:

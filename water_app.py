@@ -42,6 +42,7 @@ from water_palette import PaletteMixin
 from water_project_workflow import ProjectWorkflowMixin
 from water_render import build_base_image, overlay_flow_arrows, overlay_grid, overlay_scale_bar, overlay_selection, overlay_vector_layer, render_viewport_image, render_viewport_layers
 from water_shortcuts import DEFAULT_SHORTCUTS, load_shortcuts, normalize_shortcut, save_shortcuts, shortcut_label
+from water_state import FlowStateMixin
 from water_ui import FitTargetDialog, ShortcutSettingsDialog, ToolTip
 from water_ui_state import UIStateMixin
 from water_workspace import WorkspaceMixin
@@ -50,7 +51,7 @@ from water_workspace import WorkspaceMixin
 RGBA = Tuple[int, int, int, int]
 
 
-class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, FlowStatusMixin, UIStateMixin, FlowWorkflowMixin, RasterEditingMixin, EditingHistoryMixin, tk.Tk):
+class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, FlowStateMixin, FlowStatusMixin, UIStateMixin, FlowWorkflowMixin, RasterEditingMixin, EditingHistoryMixin, tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("水系栅格数据可视化订正工具")
@@ -137,20 +138,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
             "node_outline": (15, 55, 140, 255),
         }
         self.default_palette_state = self._palette_color_state()
-        self.selected_flow_cell: Optional[Tuple[int, int]] = None
-        self.selected_flow_region: Optional[Tuple[int, int, int, int]] = None
-        self.selected_flow_segment: Optional[FlowSegment] = None
-        self.flow_segment_downstream: Optional[Tuple[int, int]] = None
-        self.confirmed_flow_segments: Dict[Tuple[Tuple[int, int], Tuple[int, int]], Tuple[int, int]] = {}
-        self.confirmed_flow_segment_cells: Dict[Tuple[Tuple[int, int], Tuple[int, int]], List[Tuple[int, int]]] = {}
-        self.flow_skeleton_outlet: Optional[Tuple[int, int]] = None
-        self.flow_assist_sources: List[Tuple[int, int]] = []
-        self.flow_assist_outlets: List[Tuple[int, int]] = []
-        self.flow_assist_nodes: List[Tuple[int, int]] = []
-        self.flow_preview_ops: List[Tuple[int, int, int]] = []
-        self.flow_preview_unchanged_ops: List[Tuple[int, int, int]] = []
-        self.flow_preview_kind: str = ""
-        self.flow_preview_segment_key: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None
+        self._init_flow_state()
 
         self.stream_raster: Optional[RasterData] = None
         self.flow_raster: Optional[RasterData] = None
@@ -164,7 +152,6 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         self.histories: Dict[str, List[ChangeBatch]] = {"stream": [], "flow": []}
         self.redo_stacks: Dict[str, List[ChangeBatch]] = {"stream": [], "flow": []}
         self.snapshots: Dict[str, List[Tuple[str, RasterData]]] = {"stream": [], "flow": []}
-        self.flow_suggestions: List[Tuple[int, int, int]] = []
 
         self.current_batch: Optional[ChangeBatch] = None
         self.dragging = False
@@ -694,8 +681,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         self.stream_file_var.set(self._store_path(path))
         if switch_mode:
             self.mode_var.set("stream")
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
+        self._reset_flow_selection_state(clear_segment=False)
         self._clear_flow_skeleton_state()
         self.histories["stream"].clear()
         self.redo_stacks["stream"].clear()
@@ -718,19 +704,10 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         self.flow_file_var.set(self._store_path(path))
         if switch_mode:
             self.mode_var.set("flow")
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
-        self.selected_flow_segment = None
-        self.flow_segment_downstream = None
-        self.confirmed_flow_segments.clear()
-        self.confirmed_flow_segment_cells.clear()
-        self.flow_assist_sources = []
-        self.flow_assist_outlets = []
-        self.flow_assist_nodes = []
-        self.flow_preview_ops = []
-        self.flow_preview_unchanged_ops = []
-        self.flow_preview_kind = ""
-        self.flow_preview_segment_key = None
+        self._reset_flow_selection_state()
+        self._reset_flow_lock_state()
+        self._reset_flow_marker_state()
+        self._reset_flow_preview_state()
         self.histories["flow"].clear()
         self.redo_stacks["flow"].clear()
         self.snapshots["flow"].clear()
@@ -1074,8 +1051,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
             )
             self.info_var.set("右键框选完成，点击“锁定选区河道”即可锁定该范围内的目标河道")
         if self.selected_flow_segment is not None:
-            self.selected_flow_segment = None
-            self.flow_segment_downstream = None
+            self._reset_flow_selection_state(clear_cell=False, clear_region=False, clear_segment=True)
         self._secondary_press_xy = None
         self._secondary_press_hit = None
         self._secondary_dragging = False
@@ -1159,8 +1135,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         self._viewport_cache_image = None
         self.base_scaled_image = None
         self.overlay_image = None
-        self._flow_network_cache_key = None
-        self._flow_network_cache = None
+        self._invalidate_flow_network_cache()
 
     def on_motion(self, event: tk.Event) -> None:
         now = time.monotonic()

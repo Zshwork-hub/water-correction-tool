@@ -10,16 +10,9 @@ class UIStateMixin:
         self.tool_var.set("brush")
         self.on_tool_changed()
         if self.active_mode() != "flow":
-            self.selected_flow_cell = None
-            self.selected_flow_region = None
-            self.selected_flow_segment = None
-            self.flow_segment_downstream = None
-            self.flow_preview_ops = []
-            self.flow_preview_kind = ""
-            self.flow_preview_segment_key = None
-            self.flow_assist_sources = []
-            self.flow_assist_outlets = []
-            self.flow_assist_nodes = []
+            self._reset_flow_selection_state()
+            self._reset_flow_preview_state()
+            self._reset_flow_marker_state()
         self._maybe_setup_transformer()
         self._invalidate_viewport_cache()
         self.render(full=True)
@@ -67,9 +60,7 @@ class UIStateMixin:
 
     def on_river_flow_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
         if self.flow_preview_kind == "river_skeleton":
-            self.flow_preview_ops = []
-            self.flow_preview_kind = ""
-            self.flow_preview_segment_key = None
+            self._reset_flow_preview_state()
             self._update_flow_assist_text()
             self._refresh_flow_controls()
             self.render(full=True)
@@ -77,10 +68,7 @@ class UIStateMixin:
 
     def on_confluence_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
         if self.flow_preview_kind == "confluence":
-            self.flow_preview_ops = []
-            self.flow_preview_unchanged_ops = []
-            self.flow_preview_kind = ""
-            self.flow_preview_segment_key = None
+            self._reset_flow_preview_state()
             self.render(full=True)
         self._update_confluence_hint()
         self._update_flow_assist_text()

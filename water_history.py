@@ -59,8 +59,7 @@ class EditingHistoryMixin:
                 self.histories[mode] = self.histories[mode][-50:]
             self.redo_stacks[mode].clear()
             self.log_batch(batch)
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
+        self._reset_flow_selection_state(clear_segment=False)
         self._invalidate_viewport_cache()
         self.render(full=True)
         if batch.ops:
@@ -79,8 +78,7 @@ class EditingHistoryMixin:
         batch.undo(raster)
         self.redo_stacks[self.active_mode()].append(batch)
         self._full_render_requested = True
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
+        self._reset_flow_selection_state(clear_segment=False)
         if batch.mode == "stream":
             self._clear_flow_skeleton_state()
         self._invalidate_viewport_cache()
@@ -98,8 +96,7 @@ class EditingHistoryMixin:
         batch.apply(raster)
         self.histories[self.active_mode()].append(batch)
         self._full_render_requested = True
-        self.selected_flow_cell = None
-        self.selected_flow_region = None
+        self._reset_flow_selection_state(clear_segment=False)
         if batch.mode == "stream":
             self._clear_flow_skeleton_state()
         self._invalidate_viewport_cache()
