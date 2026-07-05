@@ -3,10 +3,12 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 from pyproj import CRS, Transformer
+
+from .water_core import RasterData
 
 try:
     import rasterio
@@ -60,6 +62,23 @@ class DemWindowPlan:
 
 @dataclass(frozen=True)
 class DemWindowSummary:
+    pixel_count: int
+    valid_count: int
+    nodata_count: int
+    min_elevation: Optional[float]
+    max_elevation: Optional[float]
+    mean_elevation: Optional[float]
+    median_elevation: Optional[float]
+
+
+@dataclass(frozen=True)
+class DemCellSummary:
+    row: int
+    col: int
+    source_bounds: Bounds
+    readable: bool
+    warning: bool
+    reason: str
     pixel_count: int
     valid_count: int
     nodata_count: int
@@ -209,6 +228,88 @@ def summarize_dem_window(dem_path: Path, window: Window) -> DemWindowSummary:
             mean_elevation=float(values.mean()),
             median_elevation=float(np.median(values)),
         )
+
+
+def raster_cell_bounds(raster: RasterData, row: int, col: int) -> Bounds:
+    cellsize = raster.header.cellsize
+    min_x = raster.header.xllcorner + col * cellsize
+    max_x = raster.header.xllcorner + (col + 1) * cellsize
+    max_y = raster.header.ymax - row * cellsize
+    min_y = raster.header.ymax - (row + 1) * cellsize
+    return min_x, min_y, max_x, max_y
+
+
+def summarize_dem_for_raster_cells(
+    dem_path: Path,
+    raster: RasterData,
+    cells: Iterable[Tuple[int, int]],
+    source_crs_text: str = "",
+    max_pixels_per_cell: int = DEFAULT_DEM_MAX_PIXELS,
+    warning_pixels_per_cell: int = DEFAULT_DEM_WARNING_PIXELS,
+    hard_max_pixels_per_cell: int = DEFAULT_DEM_HARD_MAX_PIXELS,
+) -> List[DemCellSummary]:
+    summaries: List[DemCellSummary] = []
+    raster_crs = source_crs_text or raster.crs_text or "EPSG:4326"
+    for row, col in cells:
+        bounds = raster_cell_bounds(raster, row, col)
+        if not (0 <= row < raster.nrows and 0 <= col < raster.ncols):
+            summaries.append(_empty_cell_summary(row, col, bounds, "像元超出栅格范围"))
+            continue
+        plan = plan_dem_window(
+            dem_path,
+            bounds,
+            raster_crs,
+            max_pixels=max_pixels_per_cell,
+            warning_pixels=warning_pixels_per_cell,
+            hard_max_pixels=hard_max_pixels_per_cell,
+        )
+        if not plan.readable or plan.window is None:
+            summaries.append(_empty_cell_summary(row, col, bounds, plan.reason, warning=plan.warning, pixel_count=plan.pixel_count))
+            continue
+        window_summary = summarize_dem_window(dem_path, plan.window)
+        summaries.append(
+            DemCellSummary(
+                row=row,
+                col=col,
+                source_bounds=bounds,
+                readable=True,
+                warning=plan.warning,
+                reason=plan.reason,
+                pixel_count=window_summary.pixel_count,
+                valid_count=window_summary.valid_count,
+                nodata_count=window_summary.nodata_count,
+                min_elevation=window_summary.min_elevation,
+                max_elevation=window_summary.max_elevation,
+                mean_elevation=window_summary.mean_elevation,
+                median_elevation=window_summary.median_elevation,
+            )
+        )
+    return summaries
+
+
+def _empty_cell_summary(
+    row: int,
+    col: int,
+    bounds: Bounds,
+    reason: str,
+    warning: bool = False,
+    pixel_count: int = 0,
+) -> DemCellSummary:
+    return DemCellSummary(
+        row=row,
+        col=col,
+        source_bounds=bounds,
+        readable=False,
+        warning=warning,
+        reason=reason,
+        pixel_count=pixel_count,
+        valid_count=0,
+        nodata_count=0,
+        min_elevation=None,
+        max_elevation=None,
+        mean_elevation=None,
+        median_elevation=None,
+    )
 
 
 def _round_and_buffer_window(window: Window, buffer_pixels: int) -> Window:

@@ -8,7 +8,15 @@ import numpy as np
 import rasterio
 from rasterio.transform import from_origin
 
-from water_tool.water_dem import plan_dem_window, read_dem_metadata, summarize_dem_window, transform_bounds_to_dem
+from water_tool.water_core import AscHeader, RasterData
+from water_tool.water_dem import (
+    plan_dem_window,
+    raster_cell_bounds,
+    read_dem_metadata,
+    summarize_dem_for_raster_cells,
+    summarize_dem_window,
+    transform_bounds_to_dem,
+)
 
 
 class DemSupportTests(unittest.TestCase):
@@ -28,6 +36,28 @@ class DemSupportTests(unittest.TestCase):
             nodata=-9999,
         ) as ds:
             ds.write(data, 1)
+
+    def _make_tiny_raster(self, path: Path) -> RasterData:
+        raw = [
+            "ncols 2\n",
+            "nrows 2\n",
+            "xllcorner 0\n",
+            "yllcorner 0\n",
+            "cellsize 5\n",
+            "NODATA_value -9999\n",
+        ]
+        header = AscHeader(
+            raw,
+            {
+                "ncols": 2,
+                "nrows": 2,
+                "xllcorner": 0,
+                "yllcorner": 0,
+                "cellsize": 5,
+                "nodata_value": -9999,
+            },
+        )
+        return RasterData(path, header, np.ones((2, 2), dtype=np.int32), "EPSG:4326")
 
     def test_read_dem_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -106,6 +136,53 @@ class DemSupportTests(unittest.TestCase):
         bounds = transform_bounds_to_dem((1, 2, 3, 4), "EPSG:4326", "EPSG:4326")
 
         self.assertEqual(bounds, (1.0, 2.0, 3.0, 4.0))
+
+    def test_raster_cell_bounds_uses_cell_edges(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            raster = self._make_tiny_raster(Path(tmp) / "grid.asc")
+
+            self.assertEqual(raster_cell_bounds(raster, 0, 0), (0, 5, 5, 10))
+            self.assertEqual(raster_cell_bounds(raster, 1, 1), (5, 0, 10, 5))
+
+    def test_summarize_dem_for_raster_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dem_path = root / "tiny.tif"
+            self._write_tiny_dem(dem_path)
+            raster = self._make_tiny_raster(root / "grid.asc")
+
+            summaries = summarize_dem_for_raster_cells(dem_path, raster, [(0, 0), (1, 1)])
+
+            self.assertEqual(len(summaries), 2)
+            first = summaries[0]
+            self.assertTrue(first.readable)
+            self.assertEqual(first.pixel_count, 25)
+            self.assertEqual(first.valid_count, 24)
+            self.assertEqual(first.nodata_count, 1)
+            self.assertEqual(first.min_elevation, 1.0)
+            self.assertEqual(first.max_elevation, 44.0)
+            self.assertEqual(first.median_elevation, 22.5)
+
+            second = summaries[1]
+            self.assertTrue(second.readable)
+            self.assertEqual(second.pixel_count, 25)
+            self.assertEqual(second.valid_count, 25)
+            self.assertEqual(second.min_elevation, 55.0)
+            self.assertEqual(second.max_elevation, 99.0)
+
+    def test_summarize_dem_for_raster_cells_reports_blocked_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dem_path = root / "tiny.tif"
+            self._write_tiny_dem(dem_path)
+            raster = self._make_tiny_raster(root / "grid.asc")
+
+            summaries = summarize_dem_for_raster_cells(dem_path, raster, [(0, 0)], max_pixels_per_cell=10)
+
+            self.assertEqual(len(summaries), 1)
+            self.assertFalse(summaries[0].readable)
+            self.assertEqual(summaries[0].valid_count, 0)
+            self.assertIn("超过当前上限", summaries[0].reason)
 
 
 if __name__ == "__main__":
