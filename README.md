@@ -4,7 +4,7 @@
 
 当前稳定发布：V2.1.0
 
-V2.1.0 已加入汇流范围面 SHP 加载、显示、面内河道锁定、范围 SHP 汇流预览和配色管理优化。
+V2.2.0 已进入发布收尾阶段，重点是代码维护、状态统一、渲染拆分和项目持久化测试加固。当前已发布稳定版本仍为 V2.1.0，待 V2.2 EXE 打包和 GitHub Release 完成后更新为 V2.2.0。
 
 ## 主要功能
 
@@ -53,6 +53,11 @@ python -m PyInstaller water_correction_tool_v2_1.spec --noconfirm
 dist\水系订正工具_V2.1.0.exe
 ```
 
+V2.2 发布前请参考：
+
+- `docs/V2.2工作流测试清单.md`
+- `docs/V2.2发布说明.md`
+
 ## 项目保存与导出
 
 保存项目用于继续编辑，会生成：
@@ -85,5 +90,9 @@ dist\水系订正工具_V2.1.0.exe
 - `docs/V2.1发布说明.md`
 - `docs/V2.1打包发布清单.md`
 - `docs/V2.2需求池.md`
+- `docs/V2.2维护总结.md`
+- `docs/V2.2工作流测试清单.md`
+- `docs/V2.2发布说明.md`
+- `docs/V2.3_DEM辅助方案.md`
 - `docs/V2.0发布说明.md`
 - `docs/V2.0审查与优化记录.md`
