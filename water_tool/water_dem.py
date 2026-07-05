@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from pyproj import CRS, Transformer
@@ -24,6 +25,7 @@ Bounds = Tuple[float, float, float, float]
 DEFAULT_DEM_WARNING_PIXELS = 5_000_000
 DEFAULT_DEM_MAX_PIXELS = 30_000_000
 DEFAULT_DEM_HARD_MAX_PIXELS = 100_000_000
+DEM_CACHE_VERSION = "v1"
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,7 @@ class DemMetadata:
     crs_text: str
     bounds: Bounds
     resolution: Tuple[float, float]
+    transform: Tuple[float, float, float, float, float, float]
     nodata: Optional[float]
     overviews: Tuple[int, ...]
 
@@ -88,6 +91,18 @@ class DemCellSummary:
     median_elevation: Optional[float]
 
 
+@dataclass(frozen=True)
+class DemCacheBuildResult:
+    arrays: Dict[str, np.ndarray]
+    metadata: Dict[str, object]
+    row_range: Tuple[int, int]
+    col_range: Tuple[int, int]
+    processed_cells: int
+    readable_cells: int
+    warning_cells: int
+    blocked_cells: int
+
+
 def require_rasterio() -> None:
     if rasterio is None or from_bounds is None:
         raise RuntimeError("V2.3 DEM 辅助需要安装 rasterio。")
@@ -106,6 +121,7 @@ def read_dem_metadata(path: Path) -> DemMetadata:
             crs_text=ds.crs.to_string() if ds.crs is not None else "",
             bounds=(ds.bounds.left, ds.bounds.bottom, ds.bounds.right, ds.bounds.top),
             resolution=(abs(float(ds.res[0])), abs(float(ds.res[1]))),
+            transform=tuple(float(value) for value in ds.transform[:6]),
             nodata=None if ds.nodata is None else float(ds.nodata),
             overviews=tuple(int(value) for value in ds.overviews(1)) if ds.count else (),
         )
@@ -287,6 +303,172 @@ def summarize_dem_for_raster_cells(
     return summaries
 
 
+def build_dem_cache(
+    dem_path: Path,
+    raster: RasterData,
+    row_range: Optional[Tuple[int, int]] = None,
+    col_range: Optional[Tuple[int, int]] = None,
+    source_crs_text: str = "",
+    max_pixels_per_cell: int = DEFAULT_DEM_MAX_PIXELS,
+    warning_pixels_per_cell: int = DEFAULT_DEM_WARNING_PIXELS,
+    hard_max_pixels_per_cell: int = DEFAULT_DEM_HARD_MAX_PIXELS,
+) -> DemCacheBuildResult:
+    require_rasterio()
+    row0, row1 = _normalize_range(row_range, raster.nrows)
+    col0, col1 = _normalize_range(col_range, raster.ncols)
+    height = row1 - row0
+    width = col1 - col0
+    arrays = _empty_cache_arrays(height, width)
+    raster_crs = source_crs_text or raster.crs_text or "EPSG:4326"
+    processed = 0
+    readable = 0
+    warnings = 0
+    blocked = 0
+    with rasterio.open(dem_path) as ds:
+        if ds.crs is None:
+            metadata = build_dem_cache_metadata(dem_path, raster, row0, row1, col0, col1, raster_crs)
+            metadata["error"] = "DEM 缺少 CRS"
+            return DemCacheBuildResult(arrays, metadata, (row0, row1), (col0, col1), 0, 0, 0, height * width)
+        dem_crs_text = ds.crs.to_string()
+        for row in range(row0, row1):
+            for col in range(col0, col1):
+                processed += 1
+                local_row = row - row0
+                local_col = col - col0
+                plan = _plan_dem_window_for_dataset(
+                    ds,
+                    raster_cell_bounds(raster, row, col),
+                    raster_crs,
+                    dem_crs_text,
+                    max_pixels_per_cell,
+                    warning_pixels_per_cell,
+                    hard_max_pixels_per_cell,
+                )
+                arrays["pixel_count"][local_row, local_col] = plan.pixel_count
+                arrays["warning"][local_row, local_col] = 1 if plan.warning else 0
+                if not plan.readable or plan.window is None:
+                    blocked += 1
+                    continue
+                summary = _summarize_dem_window_from_dataset(ds, plan.window)
+                arrays["valid_count"][local_row, local_col] = summary.valid_count
+                arrays["nodata_count"][local_row, local_col] = summary.nodata_count
+                if summary.valid_count > 0:
+                    readable += 1
+                    arrays["readable"][local_row, local_col] = 1
+                    arrays["min"][local_row, local_col] = float(summary.min_elevation)
+                    arrays["max"][local_row, local_col] = float(summary.max_elevation)
+                    arrays["mean"][local_row, local_col] = float(summary.mean_elevation)
+                    arrays["median"][local_row, local_col] = float(summary.median_elevation)
+                if plan.warning:
+                    warnings += 1
+    metadata = build_dem_cache_metadata(dem_path, raster, row0, row1, col0, col1, raster_crs)
+    metadata["stats"] = {
+        "processed_cells": processed,
+        "readable_cells": readable,
+        "warning_cells": warnings,
+        "blocked_cells": blocked,
+    }
+    return DemCacheBuildResult(arrays, metadata, (row0, row1), (col0, col1), processed, readable, warnings, blocked)
+
+
+def build_dem_cache_metadata(
+    dem_path: Path,
+    raster: RasterData,
+    row0: int,
+    row1: int,
+    col0: int,
+    col1: int,
+    raster_crs_text: str,
+) -> Dict[str, object]:
+    dem_meta = read_dem_metadata(dem_path)
+    stat = Path(dem_path).stat()
+    return {
+        "version": DEM_CACHE_VERSION,
+        "method": "median_min_max_mean_valid_count",
+        "dem": {
+            "path": str(Path(dem_path).resolve()),
+            "size": int(stat.st_size),
+            "mtime_ns": int(stat.st_mtime_ns),
+            "driver": dem_meta.driver,
+            "width": dem_meta.width,
+            "height": dem_meta.height,
+            "count": dem_meta.count,
+            "dtypes": list(dem_meta.dtypes),
+            "crs": dem_meta.crs_text,
+            "bounds": list(dem_meta.bounds),
+            "resolution": list(dem_meta.resolution),
+            "transform": list(dem_meta.transform),
+            "nodata": dem_meta.nodata,
+        },
+        "raster": {
+            "path": str(raster.path),
+            "nrows": raster.nrows,
+            "ncols": raster.ncols,
+            "xllcorner": raster.header.xllcorner,
+            "yllcorner": raster.header.yllcorner,
+            "cellsize": raster.header.cellsize,
+            "nodata": raster.header.nodata,
+            "crs": raster_crs_text,
+            "header": list(raster.header.raw_lines),
+        },
+        "window": {
+            "row0": int(row0),
+            "row1": int(row1),
+            "col0": int(col0),
+            "col1": int(col1),
+        },
+    }
+
+
+def save_dem_cache(cache_data_path: Path, cache_meta_path: Path, result: DemCacheBuildResult) -> None:
+    cache_data_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_meta_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(cache_data_path, **result.arrays)
+    cache_meta_path.write_text(json.dumps(result.metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_dem_cache(cache_data_path: Path, cache_meta_path: Path) -> Tuple[Dict[str, np.ndarray], Dict[str, object]]:
+    metadata = json.loads(cache_meta_path.read_text(encoding="utf-8"))
+    with np.load(cache_data_path, allow_pickle=False) as loaded:
+        arrays = {name: np.array(loaded[name]) for name in loaded.files}
+    return arrays, metadata
+
+
+def dem_cache_matches(
+    cache_meta: Dict[str, object],
+    dem_path: Path,
+    raster: RasterData,
+    source_crs_text: str = "",
+    row_range: Optional[Tuple[int, int]] = None,
+    col_range: Optional[Tuple[int, int]] = None,
+) -> bool:
+    try:
+        row0, row1 = _normalize_range(row_range, raster.nrows)
+        col0, col1 = _normalize_range(col_range, raster.ncols)
+        expected = build_dem_cache_metadata(
+            dem_path,
+            raster,
+            row0,
+            row1,
+            col0,
+            col1,
+            source_crs_text or raster.crs_text or "EPSG:4326",
+        )
+    except Exception:
+        return False
+    if cache_meta.get("version") != expected["version"]:
+        return False
+    if cache_meta.get("method") != expected["method"]:
+        return False
+    if cache_meta.get("dem") != expected["dem"]:
+        return False
+    if cache_meta.get("raster") != expected["raster"]:
+        return False
+    if row_range is not None or col_range is not None:
+        return cache_meta.get("window") == expected["window"]
+    return True
+
+
 def _empty_cell_summary(
     row: int,
     col: int,
@@ -309,6 +491,83 @@ def _empty_cell_summary(
         max_elevation=None,
         mean_elevation=None,
         median_elevation=None,
+    )
+
+
+def _empty_cache_arrays(height: int, width: int) -> Dict[str, np.ndarray]:
+    shape = (height, width)
+    return {
+        "median": np.full(shape, np.nan, dtype=np.float32),
+        "min": np.full(shape, np.nan, dtype=np.float32),
+        "max": np.full(shape, np.nan, dtype=np.float32),
+        "mean": np.full(shape, np.nan, dtype=np.float32),
+        "valid_count": np.zeros(shape, dtype=np.int32),
+        "nodata_count": np.zeros(shape, dtype=np.int32),
+        "pixel_count": np.zeros(shape, dtype=np.int32),
+        "readable": np.zeros(shape, dtype=np.uint8),
+        "warning": np.zeros(shape, dtype=np.uint8),
+    }
+
+
+def _normalize_range(value: Optional[Tuple[int, int]], limit: int) -> Tuple[int, int]:
+    if value is None:
+        return 0, int(limit)
+    start, end = value
+    start = max(0, min(int(limit), int(start)))
+    end = max(start, min(int(limit), int(end)))
+    return start, end
+
+
+def _plan_dem_window_for_dataset(
+    ds,
+    source_bounds: Bounds,
+    source_crs_text: str,
+    dem_crs_text: str,
+    max_pixels: int,
+    warning_pixels: int,
+    hard_max_pixels: int,
+) -> DemWindowPlan:
+    max_pixels = int(max_pixels)
+    warning_pixels = int(warning_pixels)
+    hard_max_pixels = int(hard_max_pixels)
+    effective_max_pixels = min(max_pixels, hard_max_pixels)
+    dem_bounds = transform_bounds_to_dem(source_bounds, source_crs_text, dem_crs_text)
+    raw_window = from_bounds(*dem_bounds, transform=ds.transform)
+    clipped = _clip_window(raw_window.round_offsets().round_lengths(), ds.width, ds.height)
+    if clipped is None:
+        return DemWindowPlan(source_bounds, dem_bounds, None, 0, max_pixels, warning_pixels, hard_max_pixels, False, False, False, "范围与 DEM 无交集")
+    pixel_count = int(math.ceil(clipped.width) * math.ceil(clipped.height))
+    hard_blocked = pixel_count > hard_max_pixels
+    too_large = pixel_count > effective_max_pixels
+    warning = warning_pixels > 0 and pixel_count > warning_pixels and not too_large and not hard_blocked
+    if hard_blocked:
+        reason = f"DEM window 像元 {pixel_count} 超过硬上限 {hard_max_pixels}"
+    elif too_large:
+        reason = f"DEM window 像元 {pixel_count} 超过当前上限 {effective_max_pixels}"
+    elif warning:
+        reason = f"DEM window 像元 {pixel_count} 超过提示阈值 {warning_pixels}，建议确认后读取"
+    else:
+        reason = ""
+    return DemWindowPlan(source_bounds, dem_bounds, clipped, pixel_count, max_pixels, warning_pixels, hard_max_pixels, too_large, hard_blocked, warning, reason)
+
+
+def _summarize_dem_window_from_dataset(ds, window: Window) -> DemWindowSummary:
+    data = ds.read(1, window=window, masked=True)
+    compressed = data.compressed()
+    valid_count = int(compressed.size)
+    pixel_count = int(data.size)
+    nodata_count = pixel_count - valid_count
+    if valid_count == 0:
+        return DemWindowSummary(pixel_count, 0, nodata_count, None, None, None, None)
+    values = compressed.astype(np.float64, copy=False)
+    return DemWindowSummary(
+        pixel_count=pixel_count,
+        valid_count=valid_count,
+        nodata_count=nodata_count,
+        min_elevation=float(values.min()),
+        max_elevation=float(values.max()),
+        mean_elevation=float(values.mean()),
+        median_elevation=float(np.median(values)),
     )
 
 

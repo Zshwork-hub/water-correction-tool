@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -10,9 +11,13 @@ from rasterio.transform import from_origin
 
 from water_tool.water_core import AscHeader, RasterData
 from water_tool.water_dem import (
+    build_dem_cache,
+    dem_cache_matches,
+    load_dem_cache,
     plan_dem_window,
     raster_cell_bounds,
     read_dem_metadata,
+    save_dem_cache,
     summarize_dem_for_raster_cells,
     summarize_dem_window,
     transform_bounds_to_dem,
@@ -72,6 +77,7 @@ class DemSupportTests(unittest.TestCase):
             self.assertEqual(meta.count, 1)
             self.assertEqual(meta.crs_text, "EPSG:4326")
             self.assertEqual(meta.resolution, (1.0, 1.0))
+            self.assertEqual(meta.transform, (1.0, 0.0, 0.0, 0.0, -1.0, 10.0))
             self.assertEqual(meta.nodata, -9999.0)
 
     def test_plan_dem_window_clips_and_respects_limit(self) -> None:
@@ -183,6 +189,72 @@ class DemSupportTests(unittest.TestCase):
             self.assertFalse(summaries[0].readable)
             self.assertEqual(summaries[0].valid_count, 0)
             self.assertIn("超过当前上限", summaries[0].reason)
+
+    def test_build_dem_cache_for_partial_raster(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dem_path = root / "tiny.tif"
+            self._write_tiny_dem(dem_path)
+            raster = self._make_tiny_raster(root / "grid.asc")
+
+            result = build_dem_cache(dem_path, raster, row_range=(0, 2), col_range=(0, 2))
+
+            self.assertEqual(result.row_range, (0, 2))
+            self.assertEqual(result.col_range, (0, 2))
+            self.assertEqual(result.processed_cells, 4)
+            self.assertEqual(result.readable_cells, 4)
+            self.assertEqual(result.blocked_cells, 0)
+            self.assertEqual(result.arrays["median"].shape, (2, 2))
+            self.assertEqual(result.arrays["median"].dtype, np.float32)
+            self.assertEqual(result.arrays["valid_count"].dtype, np.int32)
+            self.assertEqual(result.arrays["readable"].dtype, np.uint8)
+            self.assertAlmostEqual(float(result.arrays["median"][0, 0]), 22.5)
+            self.assertEqual(int(result.arrays["valid_count"][0, 0]), 24)
+            self.assertEqual(int(result.arrays["nodata_count"][0, 0]), 1)
+            self.assertEqual(int(result.arrays["pixel_count"][0, 0]), 25)
+            self.assertEqual(float(result.arrays["min"][1, 1]), 55.0)
+            self.assertEqual(float(result.arrays["max"][1, 1]), 99.0)
+            self.assertEqual(result.metadata["window"], {"row0": 0, "row1": 2, "col0": 0, "col1": 2})
+            self.assertEqual(result.metadata["stats"]["processed_cells"], 4)
+
+    def test_save_load_and_match_dem_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dem_path = root / "tiny.tif"
+            self._write_tiny_dem(dem_path)
+            raster = self._make_tiny_raster(root / "grid.asc")
+            result = build_dem_cache(dem_path, raster, row_range=(0, 1), col_range=(0, 2))
+            data_path = root / "cache.npz"
+            meta_path = root / "cache.json"
+
+            save_dem_cache(data_path, meta_path, result)
+            arrays, metadata = load_dem_cache(data_path, meta_path)
+
+            self.assertTrue(data_path.exists())
+            self.assertTrue(meta_path.exists())
+            np.testing.assert_array_equal(arrays["valid_count"], result.arrays["valid_count"])
+            np.testing.assert_allclose(arrays["median"], result.arrays["median"])
+            self.assertEqual(metadata["window"], {"row0": 0, "row1": 1, "col0": 0, "col1": 2})
+            self.assertTrue(dem_cache_matches(metadata, dem_path, raster))
+            self.assertTrue(dem_cache_matches(metadata, dem_path, raster, row_range=(0, 1), col_range=(0, 2)))
+            self.assertFalse(dem_cache_matches(metadata, dem_path, raster, row_range=(0, 2), col_range=(0, 2)))
+
+    def test_dem_cache_invalidates_when_inputs_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dem_path = root / "tiny.tif"
+            self._write_tiny_dem(dem_path)
+            raster = self._make_tiny_raster(root / "grid.asc")
+            result = build_dem_cache(dem_path, raster, row_range=(0, 1), col_range=(0, 1))
+            metadata = result.metadata
+
+            changed_raster = self._make_tiny_raster(root / "grid_changed.asc")
+            changed_raster.header.values["cellsize"] = 4
+            self.assertFalse(dem_cache_matches(metadata, dem_path, changed_raster, row_range=(0, 1), col_range=(0, 1)))
+
+            time.sleep(0.01)
+            dem_path.touch()
+            self.assertFalse(dem_cache_matches(metadata, dem_path, raster, row_range=(0, 1), col_range=(0, 1)))
 
 
 if __name__ == "__main__":
