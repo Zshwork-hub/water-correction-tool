@@ -7,8 +7,8 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 from scipy import ndimage
 
-from water_core import NODATA, STREAM_VALUE, RasterData, VectorLayer, clamp
-from water_geometry import line_cells
+from .water_core import NODATA, STREAM_VALUE, RasterData, VectorLayer, clamp
+from .water_geometry import line_cells
 
 
 Cell = Tuple[int, int]

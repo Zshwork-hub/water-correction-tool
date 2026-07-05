@@ -1,6 +1,6 @@
 import sys
 
-from water_app import main
+from water_tool.water_app import main
 
 
 if __name__ == "__main__":

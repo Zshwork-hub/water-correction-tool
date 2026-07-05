@@ -6,7 +6,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 from PIL import Image, ImageDraw
 
-from water_core import DIR_COLORS, NODATA, STREAM_VALUE, PolygonLayer, RasterData, VectorLayer
+from .water_core import DIR_COLORS, NODATA, STREAM_VALUE, PolygonLayer, RasterData, VectorLayer
 
 RGBA = Tuple[int, int, int, int]
 

@@ -7,9 +7,9 @@ import numpy as np
 from PIL import Image, ImageDraw
 from tkinter import messagebox
 
-from water_core import NODATA, STREAM_VALUE, ChangeBatch, RasterData, clamp, direction_text
-from water_flow_assist import direction_from_delta
-from water_geometry import brush_cells, line_cells
+from .water_core import NODATA, STREAM_VALUE, ChangeBatch, RasterData, clamp, direction_text
+from .water_flow_assist import direction_from_delta
+from .water_geometry import brush_cells, line_cells
 
 
 class RasterEditingMixin:

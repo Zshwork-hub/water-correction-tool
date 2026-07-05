@@ -5,8 +5,8 @@ from typing import Dict, Tuple
 
 from tkinter import messagebox, simpledialog
 
-from water_core import DIR_ORDER, direction_text
-from water_ui import PaletteEditorDialog
+from .water_core import DIR_ORDER, direction_text
+from .water_ui import PaletteEditorDialog
 
 
 RGBA = Tuple[int, int, int, int]

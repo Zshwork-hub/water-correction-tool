@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageTk
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from water_core import (
+from .water_core import (
     CRS,
     DIR_ORDER,
     DIR_OFFSETS,
@@ -32,20 +32,20 @@ from water_core import (
     parse_shapefile_lines,
     write_asc,
 )
-from water_editing import RasterEditingMixin
-from water_flow_status import FlowStatusMixin
-from water_flow_workflow import FlowWorkflowMixin
-from water_geometry import line_cells
-from water_flow_assist import FlowSegment
-from water_history import EditingHistoryMixin
-from water_palette import PaletteMixin
-from water_project_workflow import ProjectWorkflowMixin
-from water_render import build_base_image, overlay_flow_arrows, overlay_grid, overlay_scale_bar, overlay_selection, overlay_vector_layer, render_viewport_image, render_viewport_layers
-from water_shortcuts import DEFAULT_SHORTCUTS, load_shortcuts, normalize_shortcut, save_shortcuts, shortcut_label
-from water_state import FlowStateMixin
-from water_ui import FitTargetDialog, ShortcutSettingsDialog, ToolTip
-from water_ui_state import UIStateMixin
-from water_workspace import WorkspaceMixin
+from .water_editing import RasterEditingMixin
+from .water_flow_status import FlowStatusMixin
+from .water_flow_workflow import FlowWorkflowMixin
+from .water_geometry import line_cells
+from .water_flow_assist import FlowSegment
+from .water_history import EditingHistoryMixin
+from .water_palette import PaletteMixin
+from .water_project_workflow import ProjectWorkflowMixin
+from .water_render import build_base_image, overlay_flow_arrows, overlay_grid, overlay_scale_bar, overlay_selection, overlay_vector_layer, render_viewport_image, render_viewport_layers
+from .water_shortcuts import DEFAULT_SHORTCUTS, load_shortcuts, normalize_shortcut, save_shortcuts, shortcut_label
+from .water_state import FlowStateMixin
+from .water_ui import FitTargetDialog, ShortcutSettingsDialog, ToolTip
+from .water_ui_state import UIStateMixin
+from .water_workspace import WorkspaceMixin
 
 
 RGBA = Tuple[int, int, int, int]

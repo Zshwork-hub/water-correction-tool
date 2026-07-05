@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tkinter import filedialog, messagebox
 
-from water_core import parse_asc, parse_shapefile_lines
+from .water_core import parse_asc, parse_shapefile_lines
 
 
 class WorkspaceMixin:

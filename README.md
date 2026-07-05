@@ -26,6 +26,13 @@ python water_correction_tool.py
 
 首次运行时请选择工作目录。数据文件不随代码仓库发布，请用户自行加载河道 ASC、流向 ASC 和 SHP 文件。
 
+## 代码结构
+
+- `water_correction_tool.py`：根目录启动入口。
+- `water_tool/`：桌面应用业务代码包。
+- `tests/`：轻量自动回归测试。
+- `docs/`：项目说明、发布说明和维护计划。
+
 ## 依赖安装
 
 ```powershell

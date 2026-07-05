@@ -5,9 +5,9 @@ from pathlib import Path
 
 import numpy as np
 
-from water_core import AscHeader, RasterData
-from water_history import EditingHistoryMixin
-from water_state import FlowStateMixin
+from water_tool.water_core import AscHeader, RasterData
+from water_tool.water_history import EditingHistoryMixin
+from water_tool.water_state import FlowPreviewState, FlowStateMixin
 
 
 def tiny_header() -> AscHeader:
@@ -125,6 +125,7 @@ class HistoryAndStateTests(unittest.TestCase):
         app.flow_skeleton_outlet = (1, 1)
 
         app._reset_flow_preview_state()
+        self.assertIsInstance(app.flow_preview_state, FlowPreviewState)
         self.assertEqual(app.flow_preview_ops, [])
         self.assertEqual(app.flow_preview_unchanged_ops, [])
         self.assertEqual(app.flow_preview_kind, "")

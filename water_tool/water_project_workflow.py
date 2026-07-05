@@ -6,14 +6,14 @@ from typing import Dict, Optional
 import numpy as np
 from tkinter import filedialog, messagebox
 
-from water_core import (
+from .water_core import (
     RasterData,
     parse_asc,
     parse_shapefile_lines,
     parse_shapefile_polygon,
     resolve_relative_or_absolute,
 )
-from water_project import (
+from .water_project import (
     project_data_path,
     raster_payload,
     read_project_arrays,

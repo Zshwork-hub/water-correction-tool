@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import tkinter as tk
 
-from water_core import ChangeBatch
+from .water_core import ChangeBatch
 
 
 class EditingHistoryMixin:

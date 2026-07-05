@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 from tkinter import messagebox
 
-from water_core import (
+from .water_core import (
     DIR_OFFSETS,
     DIR_ORDER,
     NODATA,
@@ -19,8 +19,8 @@ from water_core import (
     RasterData,
     direction_text,
 )
-from water_flow_assist import FlowNetworkAssistant, direction_from_delta
-from water_polygon import point_in_any_ring, rings_bounds
+from .water_flow_assist import FlowNetworkAssistant, direction_from_delta
+from .water_polygon import point_in_any_ring, rings_bounds
 
 
 class FlowWorkflowMixin:

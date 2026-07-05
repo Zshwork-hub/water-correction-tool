@@ -7,7 +7,7 @@ from typing import Callable, Dict, Optional
 
 import numpy as np
 
-from water_core import RasterData, parse_asc_header_lines
+from .water_core import RasterData, parse_asc_header_lines
 
 
 PathFormatter = Callable[[Path], str]
