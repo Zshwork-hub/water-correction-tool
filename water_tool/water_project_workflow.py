@@ -66,6 +66,7 @@ class ProjectWorkflowMixin:
             "flow_path": self._store_path(self.flow_raster.path) if self.flow_raster is not None else "",
             "shp_path": self._store_path(self.vector_layer.path) if self.vector_layer is not None else "",
             "confluence_polygon_path": self._store_path(self.confluence_polygon_layer.path) if self.confluence_polygon_layer is not None else "",
+            "dem_path": self._store_path(self.dem_path) if self.dem_path is not None else "",
             "show_confluence_polygon": self.show_confluence_polygon_var.get(),
             "confluence_polygon_width": int(self.confluence_polygon_width_var.get()),
             "data_path": self._store_path(data_path),
@@ -137,6 +138,11 @@ class ProjectWorkflowMixin:
             resolved = self._resolve_stored_path(confluence_polygon_path)
             if resolved.exists():
                 self.load_confluence_polygon(resolved, update_autosave=False)
+        dem_path = payload.get("dem_path")
+        if isinstance(dem_path, str) and dem_path:
+            resolved = self._resolve_stored_path(dem_path)
+            if resolved.exists():
+                self.load_dem(resolved, update_autosave=False)
         mode = str(payload.get("mode", self.mode_var.get()))
         if mode in {"stream", "flow"}:
             self.mode_var.set(mode)
@@ -183,6 +189,7 @@ class ProjectWorkflowMixin:
         self.confluence_polygon_layer = None
         self.transformer = None
         self.confluence_transformer = None
+        self._clear_dem_state()
         self.stream_file_var.set("未加载")
         self.flow_file_var.set("未加载")
         self.shp_var.set("未加载")
@@ -241,6 +248,7 @@ class ProjectWorkflowMixin:
                 "original_flow": self._snapshot_raster_payload(self.original_flow_raster),
                 "shp_path": self._store_path(self.vector_layer.path) if self.vector_layer is not None else "",
                 "confluence_polygon_path": self._store_path(self.confluence_polygon_layer.path) if self.confluence_polygon_layer is not None else "",
+                "dem_path": self._store_path(self.dem_path) if self.dem_path is not None else "",
                 "palette_state": self._palette_state(),
             }
             write_session_files(
@@ -323,6 +331,11 @@ class ProjectWorkflowMixin:
                 if polygon.exists():
                     self.confluence_polygon_layer = parse_shapefile_polygon(polygon)
                     self.confluence_shp_var.set(self._store_path(polygon))
+            dem_path = meta.get("dem_path")
+            if isinstance(dem_path, str) and dem_path:
+                dem = self._resolve_stored_path(dem_path)
+                if dem.exists():
+                    self.load_dem(dem, update_autosave=False)
             if self.stream_raster is not None:
                 self.stream_file_var.set(self._store_path(self.stream_raster.path))
             if self.flow_raster is not None:

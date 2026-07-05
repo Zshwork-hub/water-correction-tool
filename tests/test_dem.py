@@ -12,6 +12,7 @@ from rasterio.transform import from_origin
 from water_tool.water_core import AscHeader, RasterData
 from water_tool.water_dem import (
     build_dem_cache,
+    DemCacheCancelled,
     dem_cache_matches,
     load_dem_cache,
     plan_dem_window,
@@ -255,6 +256,48 @@ class DemSupportTests(unittest.TestCase):
             time.sleep(0.01)
             dem_path.touch()
             self.assertFalse(dem_cache_matches(metadata, dem_path, raster, row_range=(0, 1), col_range=(0, 1)))
+
+    def test_build_dem_cache_reports_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dem_path = root / "tiny.tif"
+            self._write_tiny_dem(dem_path)
+            raster = self._make_tiny_raster(root / "grid.asc")
+            calls = []
+
+            result = build_dem_cache(
+                dem_path,
+                raster,
+                progress_callback=lambda done, total, readable, blocked: calls.append((done, total, readable, blocked)),
+                progress_interval_cells=2,
+            )
+
+            self.assertEqual(result.processed_cells, 4)
+            self.assertGreaterEqual(len(calls), 3)
+            self.assertEqual(calls[0], (0, 4, 0, 0))
+            self.assertEqual(calls[-1][0], 4)
+            self.assertEqual(calls[-1][1], 4)
+
+    def test_build_dem_cache_can_be_cancelled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dem_path = root / "tiny.tif"
+            self._write_tiny_dem(dem_path)
+            raster = self._make_tiny_raster(root / "grid.asc")
+            should_cancel = {"value": False}
+
+            def progress(done: int, _total: int, _readable: int, _blocked: int) -> None:
+                if done >= 2:
+                    should_cancel["value"] = True
+
+            with self.assertRaises(DemCacheCancelled):
+                build_dem_cache(
+                    dem_path,
+                    raster,
+                    progress_callback=progress,
+                    cancel_checker=lambda: should_cancel["value"],
+                    progress_interval_cells=2,
+                )
 
 
 if __name__ == "__main__":

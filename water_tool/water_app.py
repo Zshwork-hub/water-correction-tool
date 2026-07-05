@@ -31,6 +31,7 @@ from .water_core import (
     parse_shapefile_lines,
     write_asc,
 )
+from .water_dem_workflow import DemWorkflowMixin
 from .water_editing import RasterEditingMixin
 from .water_flow_render import FlowRenderMixin
 from .water_flow_status import FlowStatusMixin
@@ -50,7 +51,7 @@ from .water_workspace import WorkspaceMixin
 RGBA = Tuple[int, int, int, int]
 
 
-class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, FlowStateMixin, FlowStatusMixin, UIStateMixin, FlowWorkflowMixin, FlowRenderMixin, RasterEditingMixin, EditingHistoryMixin, tk.Tk):
+class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin, PaletteMixin, FlowStateMixin, FlowStatusMixin, UIStateMixin, FlowWorkflowMixin, FlowRenderMixin, RasterEditingMixin, EditingHistoryMixin, tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("水系栅格数据可视化订正工具")
@@ -90,6 +91,8 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         self.flow_file_var = tk.StringVar(value="未加载")
         self.shp_var = tk.StringVar(value="未加载")
         self.confluence_shp_var = tk.StringVar(value="未加载")
+        self.dem_file_var = tk.StringVar(value="未加载")
+        self.dem_cache_status_var = tk.StringVar(value="未生成")
         self.coord_var = tk.StringVar(value="")
         self.confluence_inner_radius_var = tk.IntVar(value=3)
         self.confluence_outer_radius_var = tk.IntVar(value=4)
@@ -138,6 +141,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         }
         self.default_palette_state = self._palette_color_state()
         self._init_flow_state()
+        self._init_dem_state()
 
         self.stream_raster: Optional[RasterData] = None
         self.flow_raster: Optional[RasterData] = None
@@ -329,6 +333,8 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         ttk.Label(file_box, textvariable=self.shp_var, wraplength=320).grid(row=2, column=1, sticky="w")
         ttk.Label(file_box, text="汇流范围:").grid(row=3, column=0, sticky="w")
         ttk.Label(file_box, textvariable=self.confluence_shp_var, wraplength=320).grid(row=3, column=1, sticky="w")
+        ttk.Label(file_box, text="DEM:").grid(row=4, column=0, sticky="w")
+        ttk.Label(file_box, textvariable=self.dem_file_var, wraplength=320).grid(row=4, column=1, sticky="w")
 
         status_box = ttk.LabelFrame(right, text="操作模式提示", padding=8)
         status_box.pack(fill="x", pady=(0, 8))
@@ -493,6 +499,18 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         self.flow_assist_var = tk.StringVar(value="先修好河道；右键单点或拖框选择目标河道，锁定后设出口，再预览河道流向和周边汇流。")
         ttk.Label(flow_assist_box, textvariable=self.flow_assist_var, wraplength=320, justify="left").pack(fill="x")
 
+        dem_box = ttk.LabelFrame(flow_tab, text="DEM辅助", padding=8)
+        dem_box.pack(fill="x", pady=(0, 8))
+        self.btn_load_dem = ttk.Button(dem_box, text="加载DEM", command=self.load_dem_dialog)
+        self.btn_load_dem.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.btn_build_dem_cache = ttk.Button(dem_box, text="生成锁定范围缓存", command=self.start_locked_dem_cache_task)
+        self.btn_build_dem_cache.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+        self.btn_cancel_dem_cache = ttk.Button(dem_box, text="取消缓存", command=self.cancel_dem_cache_task)
+        self.btn_cancel_dem_cache.grid(row=0, column=2, sticky="ew")
+        ttk.Label(dem_box, textvariable=self.dem_cache_status_var, wraplength=320, justify="left").grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        for col in range(3):
+            dem_box.columnconfigure(col, weight=1)
+
         snapshot_box = ttk.LabelFrame(history_tab, text="版本快照", padding=8)
         snapshot_box.pack(fill="both", expand=True)
         self.snapshot_list = tk.Listbox(snapshot_box, height=12)
@@ -550,6 +568,9 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
             self.btn_vector_color: "修改河流参考线 SHP 的叠加颜色。",
             self.btn_confluence_polygon_color: "修改汇流范围面 SHP 的边界颜色。",
             self.btn_assist_palette: "修改流向预览、框选、锁定河道、源头/节点/出口等辅助标记颜色。",
+            self.btn_load_dem: "加载 GeoTIFF DEM。DEM 不作为底图显示，只作为后续流向判断的地形证据。",
+            self.btn_build_dem_cache: "为当前已锁定河道的局部外包范围生成 DEM 粗像元缓存，不扫描全国范围。",
+            self.btn_cancel_dem_cache: "取消正在运行的 DEM 缓存任务，取消后不会保存半成品缓存。",
             self.btn_reset_palette: "恢复内置默认颜色，不改变数据和显示开关。",
             self.preset_combo: "选择一个已保存的配色预设。",
             self.btn_save_preset: "把当前颜色和显示开关保存为预设。",
@@ -1532,6 +1553,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, PaletteMixin, Flo
         self.canvas.config(scrollregion=self.canvas["scrollregion"])
 
     def on_close(self) -> None:
+        self.cancel_dem_cache_task(silent=True)
         if self.autosave_var.get():
             self.save_autosave()
         self.destroy()

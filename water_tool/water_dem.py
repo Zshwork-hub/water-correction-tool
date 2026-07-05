@@ -4,7 +4,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from pyproj import CRS, Transformer
@@ -26,6 +26,12 @@ DEFAULT_DEM_WARNING_PIXELS = 5_000_000
 DEFAULT_DEM_MAX_PIXELS = 30_000_000
 DEFAULT_DEM_HARD_MAX_PIXELS = 100_000_000
 DEM_CACHE_VERSION = "v1"
+DemCacheProgressCallback = Callable[[int, int, int, int], None]
+DemCacheCancelChecker = Callable[[], bool]
+
+
+class DemCacheCancelled(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -312,6 +318,9 @@ def build_dem_cache(
     max_pixels_per_cell: int = DEFAULT_DEM_MAX_PIXELS,
     warning_pixels_per_cell: int = DEFAULT_DEM_WARNING_PIXELS,
     hard_max_pixels_per_cell: int = DEFAULT_DEM_HARD_MAX_PIXELS,
+    progress_callback: Optional[DemCacheProgressCallback] = None,
+    cancel_checker: Optional[DemCacheCancelChecker] = None,
+    progress_interval_cells: int = 100,
 ) -> DemCacheBuildResult:
     require_rasterio()
     row0, row1 = _normalize_range(row_range, raster.nrows)
@@ -324,6 +333,10 @@ def build_dem_cache(
     readable = 0
     warnings = 0
     blocked = 0
+    total_cells = height * width
+    progress_interval = max(1, int(progress_interval_cells))
+    if progress_callback is not None:
+        progress_callback(0, total_cells, 0, 0)
     with rasterio.open(dem_path) as ds:
         if ds.crs is None:
             metadata = build_dem_cache_metadata(dem_path, raster, row0, row1, col0, col1, raster_crs)
@@ -332,6 +345,8 @@ def build_dem_cache(
         dem_crs_text = ds.crs.to_string()
         for row in range(row0, row1):
             for col in range(col0, col1):
+                if cancel_checker is not None and cancel_checker():
+                    raise DemCacheCancelled("DEM 缓存生成已取消")
                 processed += 1
                 local_row = row - row0
                 local_col = col - col0
@@ -361,6 +376,8 @@ def build_dem_cache(
                     arrays["median"][local_row, local_col] = float(summary.median_elevation)
                 if plan.warning:
                     warnings += 1
+                if progress_callback is not None and (processed % progress_interval == 0 or processed == total_cells):
+                    progress_callback(processed, total_cells, readable, blocked)
     metadata = build_dem_cache_metadata(dem_path, raster, row0, row1, col0, col1, raster_crs)
     metadata["stats"] = {
         "processed_cells": processed,

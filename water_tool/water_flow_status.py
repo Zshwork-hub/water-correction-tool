@@ -17,11 +17,13 @@ class FlowStatusMixin:
         autosave_text = "开启" if self.autosave_var.get() else "关闭"
         stream_loaded = "已加载" if self.stream_raster is not None else "未加载"
         flow_loaded = "已加载" if self.flow_raster is not None else "未加载"
+        dem_loaded = "已加载" if getattr(self, "dem_path", None) is not None else "未加载"
+        dem_cache_text = self.dem_cache_status_var.get() if hasattr(self, "dem_cache_status_var") else "未生成"
         range_loaded = "，范围SHP已加载" if self.confluence_polygon_layer is not None else ""
         self.mode_status_var.set(f"当前模式：{mode_text}")
         self.tool_status_var.set(f"当前工具：{tool_text}  快捷键 {self._shortcut_label('brush')}=画笔 / {self._shortcut_label('eraser')}=橡皮擦")
         self.flow_status_var.set(f"流向辅助：锁定 {locked_count} 个河道像元，{outlet_text}，{preview_text}{range_loaded}；{self._flow_next_step_text()}")
-        self.session_status_var.set(f"数据：河道{stream_loaded}，流向{flow_loaded}；自动保存{autosave_text}")
+        self.session_status_var.set(f"数据：河道{stream_loaded}，流向{flow_loaded}，DEM{dem_loaded}；DEM缓存：{dem_cache_text}；自动保存{autosave_text}")
 
     def _flow_apply_button_text(self) -> str:
         return self.flow_preview_state.apply_button_text()

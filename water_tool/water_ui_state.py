@@ -57,6 +57,8 @@ class UIStateMixin:
         self.btn_apply_flow_preview.configure(state=state(apply_ready), text=apply_text)
         self.btn_clear_flow_preview.configure(state=state(preview_ready))
         self.update_mode_status()
+        if hasattr(self, "_refresh_dem_controls"):
+            self._refresh_dem_controls()
 
     def on_river_flow_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
         if self.flow_preview_state.kind == "river_skeleton":
