@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+import numpy as np
 import tkinter as tk
 
 from water_core import ChangeBatch
@@ -32,22 +33,40 @@ class EditingHistoryMixin:
         if not selection:
             return
         idx = selection[0]
-        snapshots = self.snapshots[self.active_mode()]
+        mode = self.active_mode()
+        snapshots = self.snapshots[mode]
         if idx >= len(snapshots):
             return
         name, snap = snapshots[idx]
-        if self.active_mode() == "stream":
+        current = self.get_active_raster()
+        if current is None:
+            return
+        batch = ChangeBatch(mode=mode, tool="snapshot_restore", note=f"restore snapshot {name}")
+        if current.data.shape == snap.data.shape:
+            rows, cols = np.where(current.data != snap.data)
+            for row, col in zip(rows.tolist(), cols.tolist()):
+                old = int(current.data[row, col])
+                new = int(snap.data[row, col])
+                batch.add(int(row), int(col), old, new)
+        if mode == "stream":
             self.stream_raster = snap.copy()
             self._clear_flow_skeleton_state()
         else:
             self.flow_raster = snap.copy()
-        self.histories[self.active_mode()].clear()
-        self.redo_stacks[self.active_mode()].clear()
+        if batch.ops:
+            self.histories[mode].append(batch)
+            if len(self.histories[mode]) > 50:
+                self.histories[mode] = self.histories[mode][-50:]
+            self.redo_stacks[mode].clear()
+            self.log_batch(batch)
         self.selected_flow_cell = None
         self.selected_flow_region = None
         self._invalidate_viewport_cache()
         self.render(full=True)
-        self.info_var.set(f"已恢复快照 {name}")
+        if batch.ops:
+            self.info_var.set(f"已恢复快照 {name}，可撤销本次恢复")
+        else:
+            self.info_var.set(f"已恢复快照 {name}，当前数据与快照一致")
 
     def undo(self) -> None:
         history = self.histories[self.active_mode()]
