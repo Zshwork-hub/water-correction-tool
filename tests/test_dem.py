@@ -356,6 +356,26 @@ class DemSupportTests(unittest.TestCase):
         self.assertEqual(scores[0].severity, "severe")
         self.assertEqual(summary["uphill_severe"], 1)
 
+    def test_score_flow_directions_uses_custom_uphill_thresholds(self) -> None:
+        arrays = {
+            "median": np.array([[10.0], [18.0]], dtype=np.float32),
+            "readable": np.ones((2, 1), dtype=np.uint8),
+        }
+        metadata = {"window": {"row0": 0, "row1": 2, "col0": 0, "col1": 1}}
+
+        default_score = score_flow_directions_from_cache(arrays, metadata, [(0, 0, 4)], flat_tolerance=1.0)[0]
+        custom_score = score_flow_directions_from_cache(
+            arrays,
+            metadata,
+            [(0, 0, 4)],
+            flat_tolerance=1.0,
+            mild_uphill_threshold=10.0,
+            severe_uphill_threshold=20.0,
+        )[0]
+
+        self.assertEqual(default_score.severity, "moderate")
+        self.assertEqual(custom_score.severity, "mild")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -235,6 +235,7 @@ class DemWorkflowMixin:
         self.btn_evaluate_dem_preview.configure(state="normal" if has_cache and has_preview and not running else "disabled")
         self.btn_locate_dem_conflict.configure(state="normal" if has_conflicts and not running else "disabled")
         self.btn_export_dem_report.configure(state="normal" if has_scores and not running else "disabled")
+        self.btn_export_dem_conflicts.configure(state="normal" if has_conflicts and not running else "disabled")
         self.btn_cancel_dem_cache.configure(state="normal" if running else "disabled")
 
     def evaluate_current_flow_preview_with_dem(self) -> None:
@@ -250,7 +251,7 @@ class DemWorkflowMixin:
             messagebox.showwarning("提示", "当前预览没有可评估的像元。")
             return
         try:
-            scores = score_flow_directions_from_cache(self.dem_cache_arrays, self.dem_cache_metadata, all_ops)
+            scores = score_flow_directions_from_cache(self.dem_cache_arrays, self.dem_cache_metadata, all_ops, **self._dem_score_params())
         except Exception as exc:
             messagebox.showerror("DEM评估失败", str(exc))
             return
@@ -298,13 +299,22 @@ class DemWorkflowMixin:
         self.render(full=False)
 
     def export_dem_score_report(self) -> None:
+        self._export_dem_score_report(only_conflicts=False)
+
+    def export_dem_conflict_report(self) -> None:
+        self._export_dem_score_report(only_conflicts=True)
+
+    def _export_dem_score_report(self, only_conflicts: bool = False) -> None:
         scores = list(getattr(self.flow_preview_state, "dem_score_details", []))
+        if only_conflicts:
+            scores = [score for score in scores if getattr(score, "status", "") == "uphill"]
         if not scores:
-            messagebox.showinfo("提示", "当前没有 DEM 评估结果可导出。")
+            messagebox.showinfo("提示", "当前没有可导出的 DEM 评估结果。")
             return
-        default_name = f"dem_preview_report_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        prefix = "dem_conflict_report" if only_conflicts else "dem_preview_report"
+        default_name = f"{prefix}_{time.strftime('%Y%m%d_%H%M%S')}.csv"
         path = filedialog.asksaveasfilename(
-            title="导出DEM评估报告",
+            title="导出DEM冲突报告" if only_conflicts else "导出DEM评估报告",
             defaultextension=".csv",
             initialdir=str(self.workspace_dir),
             initialfile=default_name,
@@ -330,7 +340,8 @@ class DemWorkflowMixin:
                         score.reason,
                     ]
                 )
-        self.info_var.set(f"已导出 DEM 评估报告：{out_path.name}")
+        report_name = "DEM 冲突报告" if only_conflicts else "DEM 评估报告"
+        self.info_var.set(f"已导出 {report_name}：{out_path.name}")
 
     def _format_dem_score_summary(self, summary) -> str:
         uphill_detail = ""
@@ -363,11 +374,31 @@ class DemWorkflowMixin:
                 self.dem_score_status_var.set(f"当前预览 {len(all_ops)} 个像元；未加载 DEM。")
             return
         try:
-            scores = score_flow_directions_from_cache(self.dem_cache_arrays, self.dem_cache_metadata, all_ops)
+            scores = score_flow_directions_from_cache(self.dem_cache_arrays, self.dem_cache_metadata, all_ops, **self._dem_score_params())
         except Exception as exc:
             self.dem_score_status_var.set(f"DEM缓存覆盖检查失败：{exc}")
             return
         self.dem_score_status_var.set(f"{self._format_dem_cache_coverage(scores)}；可点击“评估当前预览”。")
+
+    def _dem_score_params(self) -> dict:
+        flat = self._get_nonnegative_float_var(self.dem_flat_tolerance_var, 1.0)
+        mild = self._get_nonnegative_float_var(self.dem_mild_uphill_var, 2.0)
+        severe = self._get_nonnegative_float_var(self.dem_severe_uphill_var, 10.0)
+        severe = max(mild, severe)
+        if severe != self._get_nonnegative_float_var(self.dem_severe_uphill_var, 10.0):
+            self.dem_severe_uphill_var.set(severe)
+        return {
+            "flat_tolerance": flat,
+            "mild_uphill_threshold": mild,
+            "severe_uphill_threshold": severe,
+        }
+
+    def _get_nonnegative_float_var(self, var, fallback: float) -> float:
+        try:
+            return max(0.0, float(var.get()))
+        except Exception:
+            var.set(fallback)
+            return fallback
 
     def _format_dem_cache_coverage(self, scores) -> str:
         total = len(scores)

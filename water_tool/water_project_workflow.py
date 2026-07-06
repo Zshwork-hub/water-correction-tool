@@ -47,6 +47,7 @@ class ProjectWorkflowMixin:
 
     def save_project(self, path: Path) -> None:
         data_path = project_data_path(path)
+        dem_params = self._dem_score_params()
         payload = {
             "version": "2.0",
             "workspace_dir": str(self.workspace_dir),
@@ -67,6 +68,9 @@ class ProjectWorkflowMixin:
             "shp_path": self._store_path(self.vector_layer.path) if self.vector_layer is not None else "",
             "confluence_polygon_path": self._store_path(self.confluence_polygon_layer.path) if self.confluence_polygon_layer is not None else "",
             "dem_path": self._store_path(self.dem_path) if self.dem_path is not None else "",
+            "dem_flat_tolerance": dem_params["flat_tolerance"],
+            "dem_mild_uphill": dem_params["mild_uphill_threshold"],
+            "dem_severe_uphill": dem_params["severe_uphill_threshold"],
             "show_confluence_polygon": self.show_confluence_polygon_var.get(),
             "confluence_polygon_width": int(self.confluence_polygon_width_var.get()),
             "data_path": self._store_path(data_path),
@@ -161,6 +165,9 @@ class ProjectWorkflowMixin:
         self.zoom_var.set(float(payload.get("zoom", self.zoom_var.get())))
         self.confluence_inner_radius_var.set(int(payload.get("confluence_inner_radius", self.confluence_inner_radius_var.get())))
         self.confluence_outer_radius_var.set(int(payload.get("confluence_outer_radius", self.confluence_outer_radius_var.get())))
+        self.dem_flat_tolerance_var.set(float(payload.get("dem_flat_tolerance", self.dem_flat_tolerance_var.get())))
+        self.dem_mild_uphill_var.set(float(payload.get("dem_mild_uphill", self.dem_mild_uphill_var.get())))
+        self.dem_severe_uphill_var.set(float(payload.get("dem_severe_uphill", self.dem_severe_uphill_var.get())))
         self.show_confluence_polygon_var.set(bool(payload.get("show_confluence_polygon", self.show_confluence_polygon_var.get())))
         self.confluence_polygon_width_var.set(int(payload.get("confluence_polygon_width", self.confluence_polygon_width_var.get())))
         palette_state = payload.get("palette_state")
@@ -223,6 +230,7 @@ class ProjectWorkflowMixin:
         if self.stream_raster is None and self.flow_raster is None:
             return
         try:
+            dem_params = self._dem_score_params()
             meta = {
                 "mode": self.mode_var.get(),
                 "tool": self.tool_var.get(),
@@ -249,6 +257,9 @@ class ProjectWorkflowMixin:
                 "shp_path": self._store_path(self.vector_layer.path) if self.vector_layer is not None else "",
                 "confluence_polygon_path": self._store_path(self.confluence_polygon_layer.path) if self.confluence_polygon_layer is not None else "",
                 "dem_path": self._store_path(self.dem_path) if self.dem_path is not None else "",
+                "dem_flat_tolerance": dem_params["flat_tolerance"],
+                "dem_mild_uphill": dem_params["mild_uphill_threshold"],
+                "dem_severe_uphill": dem_params["severe_uphill_threshold"],
                 "palette_state": self._palette_state(),
             }
             write_session_files(
@@ -308,6 +319,9 @@ class ProjectWorkflowMixin:
             self.zoom_var.set(float(meta.get("zoom", self.zoom_var.get())))
             self.confluence_inner_radius_var.set(int(meta.get("confluence_inner_radius", self.confluence_inner_radius_var.get())))
             self.confluence_outer_radius_var.set(int(meta.get("confluence_outer_radius", self.confluence_outer_radius_var.get())))
+            self.dem_flat_tolerance_var.set(float(meta.get("dem_flat_tolerance", self.dem_flat_tolerance_var.get())))
+            self.dem_mild_uphill_var.set(float(meta.get("dem_mild_uphill", self.dem_mild_uphill_var.get())))
+            self.dem_severe_uphill_var.set(float(meta.get("dem_severe_uphill", self.dem_severe_uphill_var.get())))
             self.show_grid_var.set(bool(meta.get("show_grid", self.show_grid_var.get())))
             self.show_scale_var.set(bool(meta.get("show_scale", self.show_scale_var.get())))
             self.show_flow_arrows_var.set(bool(meta.get("show_flow_arrows", self.show_flow_arrows_var.get())))
