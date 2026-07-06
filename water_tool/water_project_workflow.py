@@ -71,6 +71,7 @@ class ProjectWorkflowMixin:
             "dem_flat_tolerance": dem_params["flat_tolerance"],
             "dem_mild_uphill": dem_params["mild_uphill_threshold"],
             "dem_severe_uphill": dem_params["severe_uphill_threshold"],
+            "dem_score_display": self.dem_score_display_var.get(),
             "show_confluence_polygon": self.show_confluence_polygon_var.get(),
             "confluence_polygon_width": int(self.confluence_polygon_width_var.get()),
             "data_path": self._store_path(data_path),
@@ -168,6 +169,7 @@ class ProjectWorkflowMixin:
         self.dem_flat_tolerance_var.set(float(payload.get("dem_flat_tolerance", self.dem_flat_tolerance_var.get())))
         self.dem_mild_uphill_var.set(float(payload.get("dem_mild_uphill", self.dem_mild_uphill_var.get())))
         self.dem_severe_uphill_var.set(float(payload.get("dem_severe_uphill", self.dem_severe_uphill_var.get())))
+        self.dem_score_display_var.set(payload.get("dem_score_display", self.dem_score_display_var.get()))
         self.show_confluence_polygon_var.set(bool(payload.get("show_confluence_polygon", self.show_confluence_polygon_var.get())))
         self.confluence_polygon_width_var.set(int(payload.get("confluence_polygon_width", self.confluence_polygon_width_var.get())))
         palette_state = payload.get("palette_state")
@@ -260,6 +262,7 @@ class ProjectWorkflowMixin:
                 "dem_flat_tolerance": dem_params["flat_tolerance"],
                 "dem_mild_uphill": dem_params["mild_uphill_threshold"],
                 "dem_severe_uphill": dem_params["severe_uphill_threshold"],
+                "dem_score_display": self.dem_score_display_var.get(),
                 "palette_state": self._palette_state(),
             }
             write_session_files(
@@ -322,6 +325,7 @@ class ProjectWorkflowMixin:
             self.dem_flat_tolerance_var.set(float(meta.get("dem_flat_tolerance", self.dem_flat_tolerance_var.get())))
             self.dem_mild_uphill_var.set(float(meta.get("dem_mild_uphill", self.dem_mild_uphill_var.get())))
             self.dem_severe_uphill_var.set(float(meta.get("dem_severe_uphill", self.dem_severe_uphill_var.get())))
+            self.dem_score_display_var.set(meta.get("dem_score_display", self.dem_score_display_var.get()))
             self.show_grid_var.set(bool(meta.get("show_grid", self.show_grid_var.get())))
             self.show_scale_var.set(bool(meta.get("show_scale", self.show_scale_var.get())))
             self.show_flow_arrows_var.set(bool(meta.get("show_flow_arrows", self.show_flow_arrows_var.get())))

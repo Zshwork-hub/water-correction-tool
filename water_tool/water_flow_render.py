@@ -80,6 +80,9 @@ class FlowRenderMixin:
     ) -> None:
         if not dem_score_status:
             return
+        display_mode = self.dem_score_display_var.get() if hasattr(self, "dem_score_display_var") else "全部"
+        if display_mode == "隐藏":
+            return
         colors = {
             "downhill": (35, 165, 80, 245),
             "flat": (240, 185, 35, 245),
@@ -94,6 +97,8 @@ class FlowRenderMixin:
         }
         radius = max(2, int(round(min(7.0, max(3.0, zoom * 0.22)))))
         for (row, col), status in dem_score_status.items():
+            if display_mode == "仅冲突" and status != "uphill":
+                continue
             if not (0 <= row < raster.nrows and 0 <= col < raster.ncols):
                 continue
             x0 = int(math.floor(col * zoom - self._view_x))

@@ -97,6 +97,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.dem_flat_tolerance_var = tk.DoubleVar(value=1.0)
         self.dem_mild_uphill_var = tk.DoubleVar(value=2.0)
         self.dem_severe_uphill_var = tk.DoubleVar(value=10.0)
+        self.dem_score_display_var = tk.StringVar(value="全部")
         self.coord_var = tk.StringVar(value="")
         self.confluence_inner_radius_var = tk.IntVar(value=3)
         self.confluence_outer_radius_var = tk.IntVar(value=4)
@@ -513,20 +514,33 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.btn_cancel_dem_cache.grid(row=0, column=2, sticky="ew")
         self.btn_evaluate_dem_preview = ttk.Button(dem_box, text="评估当前预览", command=self.evaluate_current_flow_preview_with_dem)
         self.btn_evaluate_dem_preview.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
-        ttk.Label(dem_box, text="平坦").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Spinbox(dem_box, from_=0.0, to=50.0, increment=0.5, width=6, textvariable=self.dem_flat_tolerance_var).grid(row=2, column=0, sticky="e", pady=(6, 0))
-        ttk.Label(dem_box, text="轻微").grid(row=2, column=1, sticky="w", pady=(6, 0))
-        ttk.Spinbox(dem_box, from_=0.0, to=100.0, increment=0.5, width=6, textvariable=self.dem_mild_uphill_var).grid(row=2, column=1, sticky="e", pady=(6, 0))
-        ttk.Label(dem_box, text="严重").grid(row=2, column=2, sticky="w", pady=(6, 0))
-        ttk.Spinbox(dem_box, from_=0.0, to=500.0, increment=1.0, width=6, textvariable=self.dem_severe_uphill_var).grid(row=2, column=2, sticky="e", pady=(6, 0))
+        ttk.Label(dem_box, text="显示").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        self.dem_score_display_box = ttk.Combobox(
+            dem_box,
+            textvariable=self.dem_score_display_var,
+            values=("全部", "仅冲突", "隐藏"),
+            state="readonly",
+            width=8,
+        )
+        self.dem_score_display_box.grid(row=2, column=0, sticky="e", pady=(6, 0))
+        self.dem_score_display_box.bind("<<ComboboxSelected>>", lambda _event: self.render(full=False))
+        ttk.Label(dem_box, text="平坦").grid(row=2, column=1, sticky="w", pady=(6, 0))
+        ttk.Spinbox(dem_box, from_=0.0, to=50.0, increment=0.5, width=6, textvariable=self.dem_flat_tolerance_var).grid(row=2, column=1, sticky="e", pady=(6, 0))
+        ttk.Label(dem_box, text="轻微").grid(row=2, column=2, sticky="w", pady=(6, 0))
+        ttk.Spinbox(dem_box, from_=0.0, to=100.0, increment=0.5, width=6, textvariable=self.dem_mild_uphill_var).grid(row=2, column=2, sticky="e", pady=(6, 0))
+        ttk.Label(dem_box, text="严重").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Spinbox(dem_box, from_=0.0, to=500.0, increment=1.0, width=6, textvariable=self.dem_severe_uphill_var).grid(row=3, column=0, sticky="e", pady=(6, 0))
         self.btn_locate_dem_conflict = ttk.Button(dem_box, text="定位逆坡冲突", command=self.locate_next_dem_conflict)
-        self.btn_locate_dem_conflict.grid(row=3, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
+        self.btn_locate_dem_conflict.grid(row=3, column=1, sticky="ew", padx=(0, 4), pady=(6, 0))
         self.btn_export_dem_report = ttk.Button(dem_box, text="导出评估报告", command=self.export_dem_score_report)
-        self.btn_export_dem_report.grid(row=3, column=1, sticky="ew", padx=(0, 4), pady=(6, 0))
+        self.btn_export_dem_report.grid(row=3, column=2, sticky="ew", pady=(6, 0))
         self.btn_export_dem_conflicts = ttk.Button(dem_box, text="导出冲突报告", command=self.export_dem_conflict_report)
-        self.btn_export_dem_conflicts.grid(row=3, column=2, sticky="ew", pady=(6, 0))
-        ttk.Label(dem_box, textvariable=self.dem_cache_status_var, wraplength=320, justify="left").grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
-        ttk.Label(dem_box, textvariable=self.dem_score_status_var, wraplength=320, justify="left").grid(row=5, column=0, columnspan=3, sticky="w", pady=(3, 0))
+        self.btn_export_dem_conflicts.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Label(dem_box, text="图例：绿=顺坡，黄=近似平坦，红=逆坡冲突，灰=无DEM", wraplength=320, justify="left").grid(
+            row=5, column=0, columnspan=3, sticky="w", pady=(6, 0)
+        )
+        ttk.Label(dem_box, textvariable=self.dem_cache_status_var, wraplength=320, justify="left").grid(row=6, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        ttk.Label(dem_box, textvariable=self.dem_score_status_var, wraplength=320, justify="left").grid(row=7, column=0, columnspan=3, sticky="w", pady=(3, 0))
         for col in range(3):
             dem_box.columnconfigure(col, weight=1)
 
@@ -590,6 +604,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             self.btn_load_dem: "加载 GeoTIFF DEM。DEM 不作为底图显示，只作为后续流向判断的地形证据。",
             self.btn_build_dem_cache: "为当前已锁定河道的局部外包范围生成 DEM 粗像元缓存，不扫描全国范围。",
             self.btn_evaluate_dem_preview: "用已生成的 DEM 缓存评估当前流向预览：顺坡、近似平坦、逆坡冲突或无DEM，并显示缓存覆盖率。",
+            self.dem_score_display_box: "控制地图上的 DEM 评分标记显示：全部、仅逆坡冲突或隐藏；不影响评估结果和导出报告。",
             self.btn_locate_dem_conflict: "循环跳转到 DEM 评估中的红色逆坡冲突像元，方便人工检查。",
             self.btn_export_dem_report: "导出当前 DEM 评估明细 CSV，包括像元位置、方向、冲突等级、高程差和原因。",
             self.btn_export_dem_conflicts: "只导出当前 DEM 评估中的逆坡冲突像元。",
