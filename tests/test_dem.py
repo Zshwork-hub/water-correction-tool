@@ -305,37 +305,56 @@ class DemSupportTests(unittest.TestCase):
         arrays = {
             "median": np.array(
                 [
-                    [100.0, 90.0, 90.4],
-                    [110.0, 95.0, np.nan],
+                    [100.0, 90.0, 90.4, 90.0],
+                    [110.0, 91.5, 95.0, 120.0],
                 ],
                 dtype=np.float32,
             ),
             "readable": np.array(
                 [
-                    [1, 1, 1],
-                    [1, 1, 0],
+                    [1, 1, 1, 1],
+                    [1, 1, 1, 0],
                 ],
                 dtype=np.uint8,
             ),
         }
-        metadata = {"window": {"row0": 10, "row1": 12, "col0": 20, "col1": 23}}
+        metadata = {"window": {"row0": 10, "row1": 12, "col0": 20, "col1": 24}}
         ops = [
             (10, 20, 1),   # east, 100 -> 90
             (10, 21, 1),   # east, 90 -> 90.4
-            (10, 21, 4),   # south, 90 -> 95
-            (10, 22, 4),   # south, target unreadable
+            (10, 21, 4),   # south, 90 -> 91.5
+            (10, 22, 4),   # south, 90.4 -> 95
+            (10, 23, 4),   # south, target unreadable
             (9, 20, 1),    # outside cache
         ]
 
         scores = score_flow_directions_from_cache(arrays, metadata, ops, flat_tolerance=1.0)
         summary = summarize_dem_direction_scores(scores)
 
-        self.assertEqual([score.status for score in scores], ["downhill", "flat", "uphill", "no_data", "no_data"])
+        self.assertEqual([score.status for score in scores], ["downhill", "flat", "uphill", "uphill", "no_data", "no_data"])
+        self.assertEqual([score.severity for score in scores], ["", "", "mild", "moderate", "", ""])
         self.assertAlmostEqual(scores[0].drop or 0.0, 10.0)
         self.assertEqual(summary["downhill"], 1)
         self.assertEqual(summary["flat"], 1)
-        self.assertEqual(summary["uphill"], 1)
+        self.assertEqual(summary["uphill"], 2)
+        self.assertEqual(summary["uphill_mild"], 1)
+        self.assertEqual(summary["uphill_moderate"], 1)
+        self.assertEqual(summary["uphill_severe"], 0)
         self.assertEqual(summary["no_data"], 2)
+
+    def test_score_flow_directions_marks_severe_uphill(self) -> None:
+        arrays = {
+            "median": np.array([[10.0], [40.0]], dtype=np.float32),
+            "readable": np.ones((2, 1), dtype=np.uint8),
+        }
+        metadata = {"window": {"row0": 0, "row1": 2, "col0": 0, "col1": 1}}
+
+        scores = score_flow_directions_from_cache(arrays, metadata, [(0, 0, 4)], flat_tolerance=1.0)
+        summary = summarize_dem_direction_scores(scores)
+
+        self.assertEqual(scores[0].status, "uphill")
+        self.assertEqual(scores[0].severity, "severe")
+        self.assertEqual(summary["uphill_severe"], 1)
 
 
 if __name__ == "__main__":

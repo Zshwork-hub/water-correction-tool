@@ -196,7 +196,10 @@ class DemWorkflowMixin:
                 self.dem_cache_status_var.set(
                     f"缓存完成：{stats.get('readable_cells', result.readable_cells)}/{stats.get('processed_cells', result.processed_cells)} 可读，{Path(data_path).name}"
                 )
-                self.dem_score_status_var.set("缓存已就绪，可评估当前流向预览")
+                if self.flow_preview_state.has_preview():
+                    self.update_dem_preview_coverage_hint()
+                else:
+                    self.dem_score_status_var.set("缓存已就绪，可评估当前流向预览")
                 self.info_var.set(f"DEM缓存已生成：{Path(data_path).name}")
                 keep_polling = False
             elif kind == "cancelled":
@@ -257,8 +260,9 @@ class DemWorkflowMixin:
         preview.dem_score_label = self._format_dem_score_summary(summary)
         preview.dem_score_details = list(scores)
         self._dem_conflict_cursor = -1
-        self.dem_score_status_var.set(preview.dem_score_label)
-        self.info_var.set(f"DEM评估完成：{preview.dem_score_label}")
+        coverage_text = self._format_dem_cache_coverage(scores)
+        self.dem_score_status_var.set(f"{coverage_text}；{preview.dem_score_label}")
+        self.info_var.set(f"DEM评估完成：{coverage_text}；{preview.dem_score_label}")
         self._update_flow_assist_text()
         self._refresh_flow_controls()
         self.render(full=False)
@@ -287,7 +291,10 @@ class DemWorkflowMixin:
                 max(1, self.canvas.winfo_height()),
             )
         drop_text = "" if score.drop is None else f"，高程差 {score.drop:.2f}"
-        self.info_var.set(f"逆坡冲突 {self._dem_conflict_cursor + 1}/{len(conflicts)}：像元 ({score.row}, {score.col})，方向 {score.code}{drop_text}")
+        severity_text = self._dem_score_severity_text(score.severity)
+        self.info_var.set(
+            f"逆坡冲突 {self._dem_conflict_cursor + 1}/{len(conflicts)}：像元 ({score.row}, {score.col})，方向 {score.code}，{severity_text}{drop_text}"
+        )
         self.render(full=False)
 
     def export_dem_score_report(self) -> None:
@@ -308,7 +315,7 @@ class DemWorkflowMixin:
         out_path = Path(path)
         with out_path.open("w", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["row", "col", "direction_code", "status", "current_elevation", "next_elevation", "drop", "reason"])
+            writer.writerow(["row", "col", "direction_code", "status", "severity", "current_elevation", "next_elevation", "drop", "reason"])
             for score in scores:
                 writer.writerow(
                     [
@@ -316,6 +323,7 @@ class DemWorkflowMixin:
                         score.col,
                         score.code,
                         self._dem_score_status_text(score.status),
+                        self._dem_score_severity_text(score.severity),
                         "" if score.current_elevation is None else f"{score.current_elevation:.6g}",
                         "" if score.next_elevation is None else f"{score.next_elevation:.6g}",
                         "" if score.drop is None else f"{score.drop:.6g}",
@@ -325,12 +333,49 @@ class DemWorkflowMixin:
         self.info_var.set(f"已导出 DEM 评估报告：{out_path.name}")
 
     def _format_dem_score_summary(self, summary) -> str:
+        uphill_detail = ""
+        if int(summary.get("uphill", 0)):
+            uphill_detail = (
+                f"（轻微 {int(summary.get('uphill_mild', 0))}，"
+                f"明显 {int(summary.get('uphill_moderate', 0))}，"
+                f"严重 {int(summary.get('uphill_severe', 0))}）"
+            )
         return (
             f"顺坡 {int(summary.get('downhill', 0))}，"
             f"近似平坦 {int(summary.get('flat', 0))}，"
-            f"逆坡冲突 {int(summary.get('uphill', 0))}，"
+            f"逆坡冲突 {int(summary.get('uphill', 0))}{uphill_detail}，"
             f"无DEM {int(summary.get('no_data', 0))}"
         )
+
+    def update_dem_preview_coverage_hint(self) -> None:
+        if not hasattr(self, "dem_score_status_var"):
+            return
+        preview = self.flow_preview_state
+        if not preview.has_preview():
+            return
+        all_ops = list(preview.ops) + list(preview.unchanged_ops)
+        if not all_ops:
+            return
+        if self.dem_cache_arrays is None or self.dem_cache_metadata is None:
+            if self.dem_path is not None:
+                self.dem_score_status_var.set(f"当前预览 {len(all_ops)} 个像元尚无 DEM 缓存，可先生成锁定范围缓存。")
+            else:
+                self.dem_score_status_var.set(f"当前预览 {len(all_ops)} 个像元；未加载 DEM。")
+            return
+        try:
+            scores = score_flow_directions_from_cache(self.dem_cache_arrays, self.dem_cache_metadata, all_ops)
+        except Exception as exc:
+            self.dem_score_status_var.set(f"DEM缓存覆盖检查失败：{exc}")
+            return
+        self.dem_score_status_var.set(f"{self._format_dem_cache_coverage(scores)}；可点击“评估当前预览”。")
+
+    def _format_dem_cache_coverage(self, scores) -> str:
+        total = len(scores)
+        covered = sum(1 for score in scores if score.status != "no_data")
+        ratio = 0.0 if total <= 0 else covered * 100.0 / total
+        missing = total - covered
+        suggestion = "，建议重新生成更大锁定范围缓存" if missing > 0 else ""
+        return f"DEM缓存覆盖 {covered}/{total} ({ratio:.1f}%)，无DEM {missing}{suggestion}"
 
     def _dem_conflict_scores(self):
         return [score for score in getattr(self.flow_preview_state, "dem_score_details", []) if getattr(score, "status", "") == "uphill"]
@@ -342,6 +387,13 @@ class DemWorkflowMixin:
             "uphill": "逆坡冲突",
             "no_data": "无DEM",
         }.get(status, status)
+
+    def _dem_score_severity_text(self, severity: str) -> str:
+        return {
+            "mild": "轻微",
+            "moderate": "明显",
+            "severe": "严重",
+        }.get(severity, "")
 
     def _dem_cache_range_for_locked_cells(self, raster: RasterData, locked_cells) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         rows = [row for row, _col in locked_cells]

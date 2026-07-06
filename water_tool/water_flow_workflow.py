@@ -696,6 +696,8 @@ class FlowWorkflowMixin:
             kind=kind,
             segment_key=segment_key,
         )
+        if hasattr(self, "update_dem_preview_coverage_hint"):
+            self.update_dem_preview_coverage_hint()
         self._update_flow_assist_text()
         if not self.flow_preview_state.has_preview():
             self.info_var.set(f"{label}: 没有可预览的像元")
