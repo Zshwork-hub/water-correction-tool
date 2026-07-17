@@ -4,6 +4,9 @@ import unittest
 
 from water_tool.water_project_panel import ProjectDataDialog
 from water_tool.water_shell_model import (
+    DISPLAY_CONTROL_KEYS,
+    FLOW_CONTROL_KEYS,
+    HISTORY_CONTROL_KEYS,
     NAV_ITEMS,
     PROJECT_DATA_ITEMS,
     STREAM_CONTROL_KEYS,
@@ -12,6 +15,7 @@ from water_tool.water_shell_model import (
     navigation_mode,
     shell_metrics,
 )
+from water_tool.water_legacy_pages import build_display_page, build_flow_compatibility_page, build_history_page
 from water_tool.water_stream_page import build_stream_page
 from water_tool.water_ui_shell import UiShellHandles
 from water_tool.water_ui_commands import CommandId
@@ -99,6 +103,47 @@ class ShellModelTests(unittest.TestCase):
         source = inspect.getsource(build_stream_page)
         for forbidden in ("direction_box", "flow_suggest", "locked", "outlet", "dem_"):
             self.assertNotIn(forbidden, source.lower())
+
+    def test_compatibility_page_control_contracts_are_complete_and_disjoint(self) -> None:
+        required_flow = {
+            "direction_box", "btn_apply_direction", "btn_flow_suggest",
+            "btn_pick_flow_segment", "btn_add_locked_cell", "btn_remove_locked_region",
+            "btn_set_flow_outlet", "btn_preview_river_flow", "btn_set_downstream",
+            "btn_reverse_segment", "btn_preview_segment", "btn_confirm_segment",
+            "btn_flow_preview", "btn_flow_apply", "btn_preview_confluence",
+            "btn_apply_flow_preview", "btn_clear_flow_preview", "btn_clear_flow_marks",
+            "btn_load_dem", "btn_build_dem_cache", "btn_cancel_dem_cache",
+            "btn_evaluate_dem_preview", "btn_locate_dem_conflict",
+            "btn_export_dem_report", "btn_export_dem_conflicts",
+        }
+        required_display = {
+            "chk_grid", "chk_scale", "chk_arrows", "chk_compare",
+            "btn_stream_palette", "btn_flow_palette", "btn_vector_color",
+            "btn_confluence_polygon_color", "btn_assist_palette", "btn_reset_palette",
+            "preset_combo", "btn_load_preset", "btn_save_preset", "btn_delete_preset",
+        }
+        required_history = {"snapshot_list", "btn_restore_snapshot", "btn_snapshot", "btn_restore_autosave"}
+
+        self.assertTrue(required_flow.issubset(FLOW_CONTROL_KEYS))
+        self.assertEqual(set(DISPLAY_CONTROL_KEYS), required_display)
+        self.assertEqual(set(HISTORY_CONTROL_KEYS), required_history)
+        all_keys = list(FLOW_CONTROL_KEYS + DISPLAY_CONTROL_KEYS + HISTORY_CONTROL_KEYS)
+        self.assertEqual(len(all_keys), len(set(all_keys)))
+
+    def test_compatibility_builders_use_scrollable_panels(self) -> None:
+        import inspect
+
+        for builder in (build_flow_compatibility_page, build_display_page, build_history_page):
+            source = inspect.getsource(builder)
+            self.assertIn("ScrollableTaskPanel", source)
+            self.assertIn("return panel, controls", source)
+
+    def test_flow_page_uses_a_fixed_footer_for_primary_actions(self) -> None:
+        import inspect
+
+        source = inspect.getsource(build_flow_compatibility_page)
+        self.assertIn("panel.footer", source)
+        self.assertNotIn("ttk.Notebook", source)
 
     def test_project_data_items_have_stable_order_and_commands(self) -> None:
         expected = [

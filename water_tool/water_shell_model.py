@@ -56,6 +56,64 @@ STREAM_CONTROL_KEYS: Tuple[str, ...] = (
     "vector_hint",
 )
 
+FLOW_CONTROL_KEYS: Tuple[str, ...] = (
+    "direction_box",
+    "btn_apply_direction",
+    "btn_flow_suggest",
+    "chk_show_confluence_polygon",
+    "btn_lock_polygon_stream",
+    "btn_pick_flow_segment",
+    "btn_add_locked_cell",
+    "btn_remove_locked_region",
+    "btn_set_flow_outlet",
+    "river_flow_mode_box",
+    "btn_preview_river_flow",
+    "confluence_mode_box",
+    "btn_set_downstream",
+    "btn_reverse_segment",
+    "btn_preview_segment",
+    "btn_confirm_segment",
+    "btn_flow_preview",
+    "btn_flow_apply",
+    "btn_preview_confluence",
+    "btn_apply_flow_preview",
+    "btn_clear_flow_preview",
+    "btn_clear_flow_marks",
+    "flow_assist_var",
+    "btn_load_dem",
+    "btn_build_dem_cache",
+    "btn_cancel_dem_cache",
+    "btn_evaluate_dem_preview",
+    "dem_score_display_box",
+    "btn_locate_dem_conflict",
+    "btn_export_dem_report",
+    "btn_export_dem_conflicts",
+)
+
+DISPLAY_CONTROL_KEYS: Tuple[str, ...] = (
+    "chk_grid",
+    "chk_scale",
+    "chk_arrows",
+    "chk_compare",
+    "btn_stream_palette",
+    "btn_flow_palette",
+    "btn_vector_color",
+    "btn_confluence_polygon_color",
+    "btn_assist_palette",
+    "btn_reset_palette",
+    "preset_combo",
+    "btn_load_preset",
+    "btn_save_preset",
+    "btn_delete_preset",
+)
+
+HISTORY_CONTROL_KEYS: Tuple[str, ...] = (
+    "snapshot_list",
+    "btn_restore_snapshot",
+    "btn_snapshot",
+    "btn_restore_autosave",
+)
+
 
 @dataclass(frozen=True)
 class ShellMetrics:
