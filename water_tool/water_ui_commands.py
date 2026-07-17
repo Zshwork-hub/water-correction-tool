@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict
+from types import MappingProxyType
+from typing import Dict, Mapping
 
 
 class CommandId(str, Enum):
@@ -52,7 +53,7 @@ def _command(command_id: CommandId, label: str, tooltip: str, mutates_data: bool
     return CommandDefinition(command_id, label, tooltip, mutates_data)
 
 
-COMMANDS: Dict[CommandId, CommandDefinition] = {
+_COMMANDS: Dict[CommandId, CommandDefinition] = {
     item.command_id: item
     for item in [
         _command(CommandId.OPEN_PROJECT, "打开项目", "打开项目并恢复数据路径、显示设置和项目状态。"),
@@ -89,6 +90,8 @@ COMMANDS: Dict[CommandId, CommandDefinition] = {
         _command(CommandId.EXPORT_UPHILL_CONFLICTS, "导出逆坡冲突", "只导出 DEM 逆坡冲突 CSV。"),
     ]
 }
+
+COMMANDS: Mapping[CommandId, CommandDefinition] = MappingProxyType(_COMMANDS)
 
 
 def get_command(command_id: CommandId) -> CommandDefinition:

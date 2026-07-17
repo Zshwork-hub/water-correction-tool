@@ -6,46 +6,45 @@ from water_tool.water_ui_commands import COMMANDS, CommandId, get_command
 
 
 class UiCommandCatalogTests(unittest.TestCase):
-    def test_command_ids_are_complete_and_unique(self) -> None:
-        expected_names = {
-            "OPEN_PROJECT",
-            "SAVE_PROJECT",
-            "EXPORT_ASC",
-            "LOAD_STREAM_ASC",
-            "LOAD_FLOW_ASC",
-            "LOAD_RIVER_SHP",
-            "LOAD_CONFLUENCE_SHP",
-            "LOAD_DEM",
-            "UNDO",
-            "REDO",
-            "CREATE_SNAPSHOT",
-            "RESTORE_AUTOSAVE",
-            "FIT_CONTENT",
-            "CENTER_RIVER",
-            "WRITE_FLOW_DIRECTION",
-            "SUGGEST_FLOW_DIRECTION",
-            "APPLY_VECTOR_CORRECTION",
-            "ADD_SELECTED_RIVERS",
-            "ADD_SELECTED_CELL",
-            "ADD_POLYGON_RIVERS",
-            "REMOVE_SELECTED_RIVERS",
-            "RESET_FLOW_ASSIST",
-            "SET_DOWNSTREAM_OUTLET",
-            "GENERATE_FLOW_PREVIEW",
-            "APPLY_FLOW_PREVIEW",
-            "CLEAR_FLOW_PREVIEW",
-            "BUILD_DEM_CACHE",
-            "CANCEL_DEM_CACHE",
-            "EVALUATE_DEM_PREVIEW",
-            "LOCATE_NEXT_UPHILL",
-            "EXPORT_DEM_REPORT",
-            "EXPORT_UPHILL_CONFLICTS",
+    def test_command_ids_have_stable_names_and_values(self) -> None:
+        expected = {
+            "OPEN_PROJECT": "project.open",
+            "SAVE_PROJECT": "project.save",
+            "EXPORT_ASC": "project.export_asc",
+            "LOAD_STREAM_ASC": "data.load_stream_asc",
+            "LOAD_FLOW_ASC": "data.load_flow_asc",
+            "LOAD_RIVER_SHP": "data.load_river_shp",
+            "LOAD_CONFLUENCE_SHP": "data.load_confluence_shp",
+            "LOAD_DEM": "data.load_dem",
+            "UNDO": "history.undo",
+            "REDO": "history.redo",
+            "CREATE_SNAPSHOT": "history.create_snapshot",
+            "RESTORE_AUTOSAVE": "history.restore_autosave",
+            "FIT_CONTENT": "map.fit_content",
+            "CENTER_RIVER": "map.center_river",
+            "WRITE_FLOW_DIRECTION": "flow.manual.write_direction",
+            "SUGGEST_FLOW_DIRECTION": "flow.manual.suggest_direction",
+            "APPLY_VECTOR_CORRECTION": "stream.apply_vector_correction",
+            "ADD_SELECTED_RIVERS": "flow.objects.add_selected_rivers",
+            "ADD_SELECTED_CELL": "flow.objects.add_selected_cell",
+            "ADD_POLYGON_RIVERS": "flow.objects.add_polygon_rivers",
+            "REMOVE_SELECTED_RIVERS": "flow.objects.remove_selected_rivers",
+            "RESET_FLOW_ASSIST": "flow.assist.reset",
+            "SET_DOWNSTREAM_OUTLET": "flow.direction.set_outlet",
+            "GENERATE_FLOW_PREVIEW": "flow.preview.generate",
+            "APPLY_FLOW_PREVIEW": "flow.preview.apply",
+            "CLEAR_FLOW_PREVIEW": "flow.preview.clear",
+            "BUILD_DEM_CACHE": "dem.cache.build",
+            "CANCEL_DEM_CACHE": "dem.cache.cancel",
+            "EVALUATE_DEM_PREVIEW": "dem.preview.evaluate",
+            "LOCATE_NEXT_UPHILL": "dem.conflict.locate_next",
+            "EXPORT_DEM_REPORT": "dem.report.export_all",
+            "EXPORT_UPHILL_CONFLICTS": "dem.report.export_conflicts",
         }
-        values = [item.value for item in CommandId.__members__.values()]
+        actual = {name: item.value for name, item in CommandId.__members__.items()}
 
-        self.assertEqual(set(CommandId.__members__), expected_names)
-        self.assertEqual(len(CommandId.__members__), 32)
-        self.assertEqual(len(values), len(set(values)))
+        self.assertEqual(actual, expected)
+        self.assertEqual(len(actual.values()), len(set(actual.values())))
 
     def test_catalog_contains_every_command_id_once(self) -> None:
         expected_ids = set(CommandId)
@@ -60,6 +59,34 @@ class UiCommandCatalogTests(unittest.TestCase):
         labels = [item.label for item in COMMANDS.values()]
 
         self.assertEqual(len(labels), len(set(labels)))
+
+    def test_mutating_command_set_is_stable(self) -> None:
+        expected = {
+            CommandId.UNDO,
+            CommandId.REDO,
+            CommandId.RESTORE_AUTOSAVE,
+            CommandId.WRITE_FLOW_DIRECTION,
+            CommandId.APPLY_VECTOR_CORRECTION,
+            CommandId.APPLY_FLOW_PREVIEW,
+        }
+
+        self.assertEqual(
+            {command_id for command_id, command in COMMANDS.items() if command.mutates_data},
+            expected,
+        )
+
+    def test_commands_reject_external_assignment(self) -> None:
+        with self.assertRaises(TypeError):
+            COMMANDS[CommandId.OPEN_PROJECT] = COMMANDS[CommandId.OPEN_PROJECT]
+
+    def test_commands_reject_external_deletion(self) -> None:
+        command = COMMANDS[CommandId.OPEN_PROJECT]
+        try:
+            with self.assertRaises(TypeError):
+                del COMMANDS[CommandId.OPEN_PROJECT]
+        finally:
+            if CommandId.OPEN_PROJECT not in COMMANDS:
+                COMMANDS[CommandId.OPEN_PROJECT] = command
 
     def test_preview_and_reset_commands_explain_their_scope(self) -> None:
         preview = get_command(CommandId.GENERATE_FLOW_PREVIEW)
