@@ -5,6 +5,7 @@ from typing import Optional
 import tkinter as tk
 
 from .water_state import FlowPreviewState
+from .water_ui_commands import CommandId
 from .water_ui_model import (
     FlowAssistFacts,
     FlowAssistViewState,
@@ -109,10 +110,12 @@ class UIStateMixin:
         self._update_shortcut_hint()
 
     def _refresh_flow_controls(self) -> None:
+        view_state = self._flow_assist_view_state()
+        enabled = view_state.enabled
         has_flow_data = self.stream_raster is not None and self.flow_raster is not None
         locked_ready = bool(self.confirmed_flow_segments)
-        apply_ready = self.flow_preview_state.has_apply_ops()
-        preview_ready = self.flow_preview_state.has_preview()
+        apply_ready = enabled[CommandId.APPLY_FLOW_PREVIEW]
+        preview_ready = enabled[CommandId.CLEAR_FLOW_PREVIEW]
         apply_text = self._flow_apply_button_text()
 
         def state(enabled: bool) -> str:
@@ -124,15 +127,15 @@ class UIStateMixin:
         self.btn_set_flow_outlet.configure(state=state(locked_ready and self.selected_flow_cell is not None))
         self.btn_preview_river_flow.configure(state=state(locked_ready and self.flow_skeleton_outlet is not None))
         self.btn_set_downstream.configure(state=state(locked_ready))
-        self.btn_add_locked_cell.configure(state=state(has_flow_data and self.selected_flow_cell is not None))
-        self.btn_remove_locked_region.configure(state=state(locked_ready and (self.selected_flow_cell is not None or self.selected_flow_region is not None)))
-        self.btn_reverse_segment.configure(state=state(apply_ready), text=apply_text)
-        self.btn_preview_segment.configure(state=state(preview_ready))
-        self.btn_confirm_segment.configure(state=state(locked_ready))
+        self.btn_add_locked_cell.configure(state=state(enabled[CommandId.ADD_SELECTED_CELL]))
+        self.btn_remove_locked_region.configure(state=state(enabled[CommandId.REMOVE_SELECTED_RIVERS]))
+        self.btn_reverse_segment.configure(state=state(enabled[CommandId.APPLY_FLOW_PREVIEW]), text=apply_text)
+        self.btn_preview_segment.configure(state=state(enabled[CommandId.CLEAR_FLOW_PREVIEW]))
+        self.btn_confirm_segment.configure(state=state(enabled[CommandId.RESET_FLOW_ASSIST]))
         self.btn_preview_confluence.configure(state=state(locked_ready))
-        self.btn_clear_flow_marks.configure(state=state(locked_ready))
-        self.btn_apply_flow_preview.configure(state=state(apply_ready), text=apply_text)
-        self.btn_clear_flow_preview.configure(state=state(preview_ready))
+        self.btn_clear_flow_marks.configure(state=state(enabled[CommandId.RESET_FLOW_ASSIST]))
+        self.btn_apply_flow_preview.configure(state=state(enabled[CommandId.APPLY_FLOW_PREVIEW]), text=apply_text)
+        self.btn_clear_flow_preview.configure(state=state(enabled[CommandId.CLEAR_FLOW_PREVIEW]))
         self.update_mode_status()
         if hasattr(self, "_refresh_dem_controls"):
             self._refresh_dem_controls()

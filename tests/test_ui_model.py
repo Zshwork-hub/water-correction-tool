@@ -27,6 +27,22 @@ class FakePreviewTarget:
         return "confluence"
 
 
+class FakeButton:
+    def __init__(self) -> None:
+        self.configure_calls = []
+
+    def configure(self, **kwargs) -> None:
+        self.configure_calls.append(kwargs)
+
+
+class FakeControlPreview:
+    def has_apply_ops(self) -> bool:
+        return False
+
+    def has_preview(self) -> bool:
+        return True
+
+
 class FlowAssistViewStateHarness(UIStateMixin, FlowWorkflowMixin):
     def __init__(self) -> None:
         self.confirmed_flow_segment_cells = {
@@ -55,6 +71,54 @@ class FlowAssistViewStateHarness(UIStateMixin, FlowWorkflowMixin):
 
     def _dem_conflict_scores(self) -> None:
         raise AssertionError("view-state adaptation must not scan DEM score details")
+
+
+class FlowControlRefreshHarness(UIStateMixin):
+    def __init__(self) -> None:
+        self.stream_raster = None
+        self.flow_raster = None
+        self.confirmed_flow_segments = []
+        self.selected_flow_cell = (1, 1)
+        self.selected_flow_region = None
+        self.flow_skeleton_outlet = None
+        self.flow_preview_state = FakeControlPreview()
+        self.view_state_calls = 0
+        self.update_mode_status_calls = 0
+        self.enabled = {
+            CommandId.ADD_SELECTED_CELL: True,
+            CommandId.REMOVE_SELECTED_RIVERS: True,
+            CommandId.APPLY_FLOW_PREVIEW: True,
+            CommandId.CLEAR_FLOW_PREVIEW: False,
+            CommandId.RESET_FLOW_ASSIST: True,
+        }
+        for name in (
+            "btn_flow_preview",
+            "btn_flow_apply",
+            "btn_pick_flow_segment",
+            "btn_set_flow_outlet",
+            "btn_preview_river_flow",
+            "btn_set_downstream",
+            "btn_add_locked_cell",
+            "btn_remove_locked_region",
+            "btn_reverse_segment",
+            "btn_preview_segment",
+            "btn_confirm_segment",
+            "btn_preview_confluence",
+            "btn_clear_flow_marks",
+            "btn_apply_flow_preview",
+            "btn_clear_flow_preview",
+        ):
+            setattr(self, name, FakeButton())
+
+    def _flow_assist_view_state(self):
+        self.view_state_calls += 1
+        return type("FakeViewState", (), {"enabled": self.enabled})()
+
+    def _flow_apply_button_text(self) -> str:
+        return "apply"
+
+    def update_mode_status(self) -> None:
+        self.update_mode_status_calls += 1
 
 
 class FlowAssistUiModelTests(unittest.TestCase):
@@ -121,6 +185,22 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertEqual(state.stage, FlowAssistStage.REVIEW)
         self.assertEqual(state.primary_command, CommandId.APPLY_FLOW_PREVIEW)
         self.assertTrue(state.enabled[CommandId.CLEAR_FLOW_PREVIEW])
+
+    def test_existing_preview_without_changes_can_be_cleared_or_reset(self) -> None:
+        state = derive_flow_assist_state(
+            FlowAssistFacts(
+                has_stream=True,
+                has_flow=True,
+                locked_count=5,
+                outlet_set=True,
+                preview_exists=True,
+                preview_changes=0,
+            )
+        )
+
+        self.assertTrue(state.enabled[CommandId.CLEAR_FLOW_PREVIEW])
+        self.assertFalse(state.enabled[CommandId.APPLY_FLOW_PREVIEW])
+        self.assertTrue(state.enabled[CommandId.RESET_FLOW_ASSIST])
 
     def test_review_summary_and_navigation_report_dem_conflicts(self) -> None:
         state = derive_flow_assist_state(
@@ -273,6 +353,22 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertFalse(
             without_cache_state.enabled[CommandId.EVALUATE_DEM_PREVIEW]
         )
+
+
+    def test_refresh_flow_controls_consumes_model_enablement_once(self) -> None:
+        app = FlowControlRefreshHarness()
+
+        app._refresh_flow_controls()
+
+        self.assertEqual(app.view_state_calls, 1)
+        self.assertEqual(app.btn_add_locked_cell.configure_calls[-1]["state"], "normal")
+        self.assertEqual(app.btn_remove_locked_region.configure_calls[-1]["state"], "normal")
+        self.assertEqual(app.btn_reverse_segment.configure_calls[-1]["state"], "normal")
+        self.assertEqual(app.btn_apply_flow_preview.configure_calls[-1]["state"], "normal")
+        self.assertEqual(app.btn_preview_segment.configure_calls[-1]["state"], "disabled")
+        self.assertEqual(app.btn_clear_flow_preview.configure_calls[-1]["state"], "disabled")
+        self.assertEqual(app.btn_confirm_segment.configure_calls[-1]["state"], "normal")
+        self.assertEqual(app.btn_clear_flow_marks.configure_calls[-1]["state"], "normal")
 
 
 if __name__ == "__main__":
