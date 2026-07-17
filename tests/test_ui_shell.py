@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from water_tool.water_shell_model import NAV_ITEMS, NavigationId, shell_metrics
+from water_tool.water_project_panel import ProjectDataDialog
+from water_tool.water_shell_model import NAV_ITEMS, PROJECT_DATA_ITEMS, NavigationId, shell_metrics
+from water_tool.water_ui_commands import CommandId
 from water_tool.water_ui_components import ScrollableTaskPanel, normalize_wheel_steps
 from water_tool.water_ui_theme import UI_COLORS, UI_SPACING, apply_ui_theme
 
@@ -30,6 +32,27 @@ class ShellModelTests(unittest.TestCase):
                 (NavigationId.HISTORY, "历史与恢复"),
             ],
         )
+
+    def test_project_data_items_have_stable_order_and_commands(self) -> None:
+        expected = [
+            ("stream", "河道 ASC", CommandId.LOAD_STREAM_ASC),
+            ("flow", "流向 ASC", CommandId.LOAD_FLOW_ASC),
+            ("river", "河流线 SHP", CommandId.LOAD_RIVER_SHP),
+            ("confluence", "汇流范围 SHP", CommandId.LOAD_CONFLUENCE_SHP),
+            ("dem", "DEM", CommandId.LOAD_DEM),
+        ]
+
+        self.assertEqual(
+            [(item.key, item.label, item.command_id) for item in PROJECT_DATA_ITEMS],
+            expected,
+        )
+
+    def test_project_data_dialog_requires_variables_and_callbacks(self) -> None:
+        import inspect
+
+        parameters = inspect.signature(ProjectDataDialog.__init__).parameters
+        self.assertIn("file_variables", parameters)
+        self.assertIn("callbacks", parameters)
 
     def test_notebook_layout_keeps_map_usable_at_1366_by_768(self) -> None:
         metrics = shell_metrics(1366, 768)

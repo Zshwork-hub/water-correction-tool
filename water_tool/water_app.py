@@ -39,6 +39,7 @@ from .water_flow_workflow import FlowWorkflowMixin
 from .water_geometry import line_cells
 from .water_history import EditingHistoryMixin
 from .water_palette import PaletteMixin
+from .water_project_panel import ProjectDataDialog
 from .water_project_workflow import ProjectWorkflowMixin
 from .water_render import build_base_image, overlay_flow_arrows, overlay_grid, overlay_scale_bar, overlay_vector_layer, render_viewport_image, render_viewport_layers
 from .water_shortcuts import DEFAULT_SHORTCUTS, load_shortcuts, normalize_shortcut, save_shortcuts, shortcut_label
@@ -70,6 +71,8 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.log_path = self.user_data_dir / "water_correction_log.csv"
 
         self.mode_var = tk.StringVar(value="stream")
+        self.navigation_var = tk.StringVar(value="stream")
+        self._project_data_dialog = None
         self.tool_var = tk.StringVar(value="brush")
         self.direction_var = tk.StringVar(value="1 东")
         self.brush_size_var = tk.IntVar(value=1)
@@ -711,6 +714,29 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             return Transformer.from_crs(CRS.from_wkt(layer.crs_text.strip()), CRS.from_wkt(raster.crs_text.strip()), always_xy=True)
         except Exception:
             return None
+
+    def open_project_data_panel(self) -> None:
+        if self._project_data_dialog is not None and self._project_data_dialog.winfo_exists():
+            self._project_data_dialog.lift()
+            self._project_data_dialog.focus_set()
+            return
+        self._project_data_dialog = ProjectDataDialog(
+            self,
+            file_variables={
+                "stream": self.stream_file_var,
+                "flow": self.flow_file_var,
+                "river": self.shp_var,
+                "confluence": self.confluence_shp_var,
+                "dem": self.dem_file_var,
+            },
+            callbacks={
+                "stream": self.load_stream_dialog,
+                "flow": self.load_flow_dialog,
+                "river": self.load_shp_dialog,
+                "confluence": self.load_confluence_polygon_dialog,
+                "dem": self.load_dem_dialog,
+            },
+        )
 
     def load_stream_dialog(self) -> None:
         path = filedialog.askopenfilename(title="选择河道ASC", filetypes=[("ASC files", "*.asc"), ("All files", "*.*")])

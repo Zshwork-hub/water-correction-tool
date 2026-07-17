@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Tuple
 
+from .water_ui_commands import CommandId
+
 
 class NavigationId(str, Enum):
     STREAM = "stream"
@@ -23,6 +25,22 @@ NAV_ITEMS: Tuple[NavigationItem, ...] = (
     NavigationItem(NavigationId.FLOW, "流向订正"),
     NavigationItem(NavigationId.DISPLAY, "显示与配色"),
     NavigationItem(NavigationId.HISTORY, "历史与恢复"),
+)
+
+
+@dataclass(frozen=True)
+class ProjectDataItem:
+    key: str
+    label: str
+    command_id: CommandId
+
+
+PROJECT_DATA_ITEMS: Tuple[ProjectDataItem, ...] = (
+    ProjectDataItem("stream", "河道 ASC", CommandId.LOAD_STREAM_ASC),
+    ProjectDataItem("flow", "流向 ASC", CommandId.LOAD_FLOW_ASC),
+    ProjectDataItem("river", "河流线 SHP", CommandId.LOAD_RIVER_SHP),
+    ProjectDataItem("confluence", "汇流范围 SHP", CommandId.LOAD_CONFLUENCE_SHP),
+    ProjectDataItem("dem", "DEM", CommandId.LOAD_DEM),
 )
 
 
