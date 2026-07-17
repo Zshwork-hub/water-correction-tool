@@ -736,6 +736,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         raster = parse_asc(path)
         if validate_kind and not self._confirm_raster_kind(raster, "stream"):
             return
+        self._invalidate_dem_cache_for_raster_change()
         self.stream_raster = raster
         self.original_stream_raster = self.stream_raster.copy()
         self.stream_file_var.set(self._store_path(path))
@@ -759,6 +760,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         raster = parse_asc(path)
         if validate_kind and not self._confirm_raster_kind(raster, "flow"):
             return
+        self._invalidate_dem_cache_for_raster_change()
         self.flow_raster = raster
         self.original_flow_raster = self.flow_raster.copy()
         self.flow_file_var.set(self._store_path(path))

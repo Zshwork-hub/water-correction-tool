@@ -25,9 +25,67 @@ from water_tool.water_dem import (
     summarize_dem_window,
     transform_bounds_to_dem,
 )
+from water_tool.water_dem_workflow import DemWorkflowMixin
+from water_tool.water_state import FlowPreviewState
+
+
+class DummyVar:
+    def __init__(self, value="") -> None:
+        self.value = value
+
+    def set(self, value) -> None:
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
+class DemInvalidationHarness(DemWorkflowMixin):
+    def __init__(self) -> None:
+        self.dem_path = Path("dem.tif")
+        self.dem_cache_arrays = {"mean": np.ones((2, 2), dtype=np.float32)}
+        self.dem_cache_metadata = {"raster": {"path": "old.asc"}}
+        self.dem_cache_data_path = Path("old.npz")
+        self.dem_cache_meta_path = Path("old.json")
+        self.dem_cache_status_var = DummyVar("已生成")
+        self.dem_score_status_var = DummyVar("逆坡冲突 2")
+        self.flow_preview_state = FlowPreviewState.create([(0, 0, 1)], kind="confluence")
+        self.flow_preview_state.dem_score_status = {(0, 0): "uphill"}
+        self.flow_preview_state.dem_score_summary = {"uphill": 2}
+        self.flow_preview_state.dem_score_label = "逆坡冲突 2"
+        self.flow_preview_state.dem_score_details = [object(), object()]
+        self._dem_conflict_cursor = 1
+        self._dem_cache_task_id = 3
+        self.cancelled = False
+
+    def cancel_dem_cache_task(self, silent=False) -> None:
+        self.cancelled = silent
+
+    def _refresh_dem_controls(self) -> None:
+        pass
 
 
 class DemSupportTests(unittest.TestCase):
+    def test_raster_change_invalidates_cache_but_keeps_loaded_dem(self) -> None:
+        app = DemInvalidationHarness()
+
+        app._invalidate_dem_cache_for_raster_change()
+
+        self.assertEqual(app.dem_path, Path("dem.tif"))
+        self.assertIsNone(app.dem_cache_arrays)
+        self.assertIsNone(app.dem_cache_metadata)
+        self.assertIsNone(app.dem_cache_data_path)
+        self.assertIsNone(app.dem_cache_meta_path)
+        self.assertEqual(app.dem_cache_status_var.get(), "已加载DEM，尚未生成缓存")
+        self.assertEqual(app.dem_score_status_var.get(), "未评估")
+        self.assertEqual(app.flow_preview_state.dem_score_status, {})
+        self.assertEqual(app.flow_preview_state.dem_score_details, [])
+        self.assertEqual(app.flow_preview_state.dem_score_summary, {})
+        self.assertEqual(app.flow_preview_state.dem_score_label, "")
+        self.assertEqual(app._dem_conflict_cursor, -1)
+        self.assertEqual(app._dem_cache_task_id, 4)
+        self.assertTrue(app.cancelled)
+
     def _write_tiny_dem(self, path: Path) -> None:
         data = np.arange(100, dtype=np.int16).reshape((10, 10))
         data[0, 0] = -9999

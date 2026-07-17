@@ -53,6 +53,27 @@ class DemWorkflowMixin:
         self._dem_conflict_cursor = -1
         self._refresh_dem_controls()
 
+    def _invalidate_dem_cache_for_raster_change(self) -> None:
+        self.cancel_dem_cache_task(silent=True)
+        self._dem_cache_task_id += 1
+        self.dem_cache_arrays = None
+        self.dem_cache_metadata = None
+        self.dem_cache_data_path = None
+        self.dem_cache_meta_path = None
+        self._dem_conflict_cursor = -1
+        preview = getattr(self, "flow_preview_state", None)
+        if preview is not None:
+            preview.dem_score_status.clear()
+            preview.dem_score_summary.clear()
+            preview.dem_score_label = ""
+            preview.dem_score_details.clear()
+        if hasattr(self, "dem_cache_status_var"):
+            status = "已加载DEM，尚未生成缓存" if self.dem_path is not None else "未生成"
+            self.dem_cache_status_var.set(status)
+        if hasattr(self, "dem_score_status_var"):
+            self.dem_score_status_var.set("未评估")
+        self._refresh_dem_controls()
+
     def load_dem_dialog(self) -> None:
         path = filedialog.askopenfilename(
             title="选择DEM文件",
