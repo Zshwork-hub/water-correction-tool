@@ -419,16 +419,17 @@ class FlowWorkflowMixin:
         self.render(full=False)
 
     def clear_flow_segment_state(self) -> None:
-        self._clear_flow_skeleton_state()
+        self._clear_flow_skeleton_state(refresh=False)
         self._refresh_flow_assist_ui()
         self.render(full=False)
         self.info_var.set("已取消当前锁定河道、出口和预览。")
 
-    def _clear_flow_skeleton_state(self) -> None:
+    def _clear_flow_skeleton_state(self, refresh: bool = True) -> None:
         self._reset_flow_selection_state()
         self._reset_flow_lock_state()
         self._reset_flow_preview_state()
-        self._refresh_flow_controls()
+        if refresh:
+            self._refresh_flow_controls()
 
     def set_flow_skeleton_outlet(self) -> None:
         if not self.confirmed_flow_segment_cells:
@@ -566,7 +567,6 @@ class FlowWorkflowMixin:
         self._set_flow_preview(ops, "河段预览", "segment", self.selected_flow_segment.edge_key)
         preview = self.flow_preview_state
         self.info_var.set(f"河道流向预览完成，方向建议 {preview.change_count} 个。可点击“{preview.apply_button_text()}”写入。")
-        self._refresh_flow_controls()
 
     def confirm_selected_flow_segment(self) -> None:
         raster = self.flow_raster
@@ -588,7 +588,6 @@ class FlowWorkflowMixin:
         self.confirmed_flow_segments[self.selected_flow_segment.edge_key] = downstream
         self.confirmed_flow_segment_cells[self.selected_flow_segment.edge_key] = list(self.selected_flow_segment.cells)
         self._reset_flow_preview_state()
-        self._update_flow_assist_text()
         if batch.ops:
             self._record_flow_batch(batch)
             self.flush_pending_render(force=True)
@@ -596,7 +595,7 @@ class FlowWorkflowMixin:
         else:
             self.render(full=False)
             self.info_var.set("河道流向已与当前栅格一致，已锁定为缓冲汇流依据。")
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
 
     def preview_confirmed_confluence(self) -> None:
         self.flow_preview_target_var.set("confluence")
@@ -641,12 +640,10 @@ class FlowWorkflowMixin:
                 self.info_var.set(
                     f"范围SHP汇流没有生成可应用预览：{distance_text}，候选像元 {candidate_count} 个，已一致 {preview.unchanged_count} 个。"
                 )
-                self._refresh_flow_controls()
                 return
             self.info_var.set(
                 f"范围SHP汇流预览完成，锁定河道 {seed_edge_count} 组，{distance_text}，候选像元 {candidate_count} 个，需修改 {preview.change_count} 个，已一致 {preview.unchanged_count} 个"
             )
-            self._refresh_flow_controls()
             return
         ops, unchanged_ops, radius, seed_edge_count = assistant.preview_locked_skeleton_confluence(
             locked_segments,
@@ -661,7 +658,6 @@ class FlowWorkflowMixin:
         self.info_var.set(
             f"周边汇流预览完成，锁定河道 {seed_edge_count} 组，远带 {radius} 像元，需修改 {preview.change_count} 个，已一致 {preview.unchanged_count} 个"
         )
-        self._refresh_flow_controls()
 
     def _set_flow_preview(
         self,
@@ -739,13 +735,12 @@ class FlowWorkflowMixin:
             self.confirmed_flow_segments[self.selected_flow_segment.edge_key] = downstream
             self.confirmed_flow_segment_cells[self.selected_flow_segment.edge_key] = list(self.selected_flow_segment.cells)
         self._reset_flow_preview_state()
-        self._update_flow_assist_text()
         if self.active_mode() != "flow":
             self.mode_var.set("flow")
             self.on_tool_changed()
             self._invalidate_viewport_cache()
             self.refresh_snapshot_list()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         self.flush_pending_render(force=True)
         self.info_var.set(applied_message)
 

@@ -114,6 +114,46 @@ class FlowAssistUiRefreshHarness(FlowStatusMixin):
         self.controls_view_state = view_state
 
 
+class FakeSegmentAssistant:
+    def normalize_segment_downstream(self, segment, downstream):
+        return downstream
+
+    def preview_segment_flow(self, segment, downstream):
+        return [(1, 1, 2)]
+
+
+class FlowPreviewCallerHarness(FlowWorkflowMixin):
+    def __init__(self) -> None:
+        self.selected_flow_segment = type(
+            "FakeSegment", (), {"edge_key": ((0, 0), (1, 1))}
+        )()
+        self.flow_segment_downstream = (1, 1)
+        self.flow_raster = None
+        self.flow_preview_state = FlowPreviewState()
+        self.info_var = FakeVar()
+        self.view_state = object()
+        self.refresh_calls = 0
+
+    def _flow_assistant(self):
+        return FakeSegmentAssistant()
+
+    def _flow_assist_view_state(self):
+        return self.view_state
+
+    def _update_flow_assist_text(self, view_state=None) -> None:
+        self.text_view_state = view_state
+
+    def _refresh_flow_controls(self, view_state=None) -> None:
+        self.refresh_calls += 1
+        self.controls_view_state = view_state
+
+    def _flow_apply_button_text(self) -> str:
+        return "应用河段预览"
+
+    def render(self, *, full: bool) -> None:
+        self.render_full = full
+
+
 class FlowAssistViewStateHarness(UIStateMixin, FlowWorkflowMixin):
     def __init__(self) -> None:
         self.confirmed_flow_segment_cells = {
@@ -481,6 +521,13 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertEqual(app.view_state_calls, 1)
         self.assertIs(app.text_view_state, app.view_state)
         self.assertIs(app.controls_view_state, app.view_state)
+
+    def test_segment_preview_caller_does_not_refresh_after_setting_preview(self) -> None:
+        app = FlowPreviewCallerHarness()
+
+        app.preview_selected_flow_segment()
+
+        self.assertEqual(app.refresh_calls, 1)
 
 
     def test_refresh_flow_controls_consumes_model_enablement_once(self) -> None:
