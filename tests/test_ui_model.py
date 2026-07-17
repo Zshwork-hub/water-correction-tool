@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from water_tool.water_flow_status import FlowStatusMixin
 from water_tool.water_flow_workflow import FlowWorkflowMixin
-from water_tool.water_state import FlowPreviewState
+from water_tool.water_state import FlowPreviewState, FlowStateMixin
 from water_tool.water_ui_commands import CommandId
 from water_tool.water_ui_model import (
     FlowAssistFacts,
@@ -258,6 +258,178 @@ class ToolChangeRefreshHarness(FlowControlRefreshHarness):
 
     def _update_shortcut_hint(self, view_state=None) -> None:
         self.update_mode_status(view_state)
+
+
+class ModeChangeRefreshHarness(FlowStatusMixin, UIStateMixin, FlowStateMixin):
+    def __init__(self) -> None:
+        self.mode_var = FakeVar("flow")
+        self.tool_var = FakeVar("brush")
+        self.autosave_var = FakeVar(True)
+        self.mode_status_var = FakeVar()
+        self.tool_status_var = FakeVar()
+        self.flow_status_var = FakeVar()
+        self.session_status_var = FakeVar()
+        self.flow_assist_var = FakeVar()
+        self.dem_cache_status_var = FakeVar("未生成")
+        self.confluence_mode_var = FakeVar("范围SHP")
+        self.confluence_max_distance_var = FakeVar(12)
+        self.flow_preview_target_var = FakeVar("confluence")
+        self.info_var = FakeVar()
+        self.stream_raster = object()
+        self.flow_raster = object()
+        self.dem_path = None
+        self.dem_cache_arrays = None
+        self.dem_cache_metadata = None
+        self.confluence_polygon_layer = None
+        self.confirmed_flow_segments = {"edge": (1, 2)}
+        self.confirmed_flow_segment_cells = {"edge": [(1, 1), (1, 2)]}
+        self.selected_flow_cell = (1, 1)
+        self.selected_flow_region = (0, 2, 0, 2)
+        self.selected_flow_segment = object()
+        self.flow_segment_downstream = (1, 2)
+        self.flow_skeleton_outlet = (1, 2)
+        self.flow_assist_sources = [(0, 0)]
+        self.flow_assist_outlets = [(1, 2)]
+        self.flow_assist_nodes = [(1, 1)]
+        self.flow_preview_state = FlowPreviewState.create(
+            [(3, 3, 2)],
+            label="周边汇流",
+            kind="confluence",
+        )
+        for name in (
+            "direction_box",
+            "btn_apply_direction",
+            "btn_flow_suggest",
+            "btn_vector_batch",
+            "radio_eraser_tool",
+            "btn_flow_preview",
+            "btn_flow_apply",
+            "btn_pick_flow_segment",
+            "btn_set_flow_outlet",
+            "btn_preview_river_flow",
+            "btn_set_downstream",
+            "btn_add_locked_cell",
+            "btn_remove_locked_region",
+            "btn_reverse_segment",
+            "btn_preview_segment",
+            "btn_confirm_segment",
+            "btn_preview_confluence",
+            "btn_clear_flow_marks",
+            "btn_apply_flow_preview",
+            "btn_clear_flow_preview",
+        ):
+            setattr(self, name, FakeButton())
+        initial_state = derive_flow_assist_state(
+            FlowAssistFacts(
+                has_stream=True,
+                has_flow=True,
+                locked_count=2,
+                outlet_set=True,
+                preview_target="confluence",
+                preview_exists=True,
+                preview_changes=1,
+            )
+        )
+        self.update_mode_status(initial_state)
+        FlowStatusMixin._update_flow_assist_text(self, initial_state)
+        self.view_state_calls = 0
+        self.derived_snapshots = []
+        self.assist_text_states = []
+        self.last_view_state = None
+
+    def _locked_flow_cells_set(self):
+        return {(1, 1), (1, 2)}
+
+    def _flow_assist_view_state(self):
+        self.view_state_calls += 1
+        self.derived_snapshots.append(
+            (
+                self.selected_flow_cell,
+                self.flow_preview_state.has_preview(),
+                tuple(self.flow_assist_sources),
+                tuple(self.flow_assist_outlets),
+                tuple(self.flow_assist_nodes),
+            )
+        )
+        self.last_view_state = UIStateMixin._flow_assist_view_state(self)
+        return self.last_view_state
+
+    def _update_flow_assist_text(self, view_state=None) -> None:
+        self.assist_text_states.append(view_state)
+        FlowStatusMixin._update_flow_assist_text(self, view_state)
+
+    def _shortcut_label(self, action: str) -> str:
+        return {"brush": "B", "eraser": "E"}[action]
+
+    def _update_shortcut_hint(self, view_state=None) -> None:
+        self.update_mode_status(view_state)
+
+    def active_mode(self) -> str:
+        return self.mode_var.get()
+
+    def _maybe_setup_transformer(self) -> None:
+        pass
+
+    def _invalidate_viewport_cache(self) -> None:
+        pass
+
+    def render(self, *, full: bool) -> None:
+        pass
+
+    def refresh_snapshot_list(self) -> None:
+        pass
+
+
+class ApplyPreviewModeSwitchHarness(FlowWorkflowMixin):
+    def __init__(self) -> None:
+        self.mode_var = FakeVar("stream")
+        self.flow_raster = object()
+        self.flow_preview_state = FlowPreviewState.create(
+            [(1, 1, 2)],
+            label="周边汇流",
+            kind="confluence",
+        )
+        self.selected_flow_segment = None
+        self.confirmed_flow_segments = {}
+        self.confirmed_flow_segment_cells = {}
+        self.info_var = FakeVar()
+        self.view_state = object()
+        self.view_state_calls = 0
+        self.text_view_state = None
+
+    def _apply_flow_ops(self, ops, tool, note):
+        return type("FakeBatch", (), {"ops": list(ops)})()
+
+    def _record_flow_batch(self, batch) -> None:
+        pass
+
+    def _reset_flow_preview_state(self) -> None:
+        self.flow_preview_state = FlowPreviewState()
+
+    def active_mode(self) -> str:
+        return self.mode_var.get()
+
+    def on_tool_changed(self):
+        return self._flow_assist_view_state()
+
+    def _flow_assist_view_state(self):
+        self.view_state_calls += 1
+        return self.view_state
+
+    def _update_flow_assist_text(self, view_state=None) -> None:
+        self.text_view_state = view_state
+
+    def _refresh_flow_assist_ui(self) -> None:
+        self._update_flow_assist_text(self._flow_assist_view_state())
+
+    def _invalidate_viewport_cache(self) -> None:
+        pass
+
+    def refresh_snapshot_list(self) -> None:
+        pass
+
+    def flush_pending_render(self, *, force: bool) -> None:
+        pass
 
 
 class FlowAssistUiModelTests(unittest.TestCase):
@@ -589,6 +761,60 @@ class FlowAssistUiModelTests(unittest.TestCase):
 
         self.assertEqual(app.view_state_calls, 1)
         self.assertIs(app.status_view_state, app.view_state)
+
+    def test_mode_change_resets_flow_state_before_single_refresh(self) -> None:
+        app = ModeChangeRefreshHarness()
+        app.mode_var.set("stream")
+
+        app.on_mode_changed()
+
+        self.assertEqual(app.view_state_calls, 1)
+        self.assertEqual(
+            app.derived_snapshots,
+            [(None, False, (), (), ())],
+        )
+        self.assertEqual(
+            app.btn_apply_flow_preview.configure_calls[-1]["state"],
+            "disabled",
+        )
+        self.assertEqual(
+            app.btn_clear_flow_preview.configure_calls[-1]["state"],
+            "disabled",
+        )
+        self.assertEqual(
+            app.flow_status_var.get(),
+            f"流向辅助：{app.last_view_state.summary}",
+        )
+        self.assertEqual(
+            app.flow_assist_var.get().splitlines()[0],
+            app.last_view_state.summary,
+        )
+        self.assertEqual(app.assist_text_states, [app.last_view_state])
+
+    def test_flow_mode_change_keeps_global_and_assist_summaries_aligned(self) -> None:
+        app = ModeChangeRefreshHarness()
+
+        app.on_mode_changed()
+
+        self.assertEqual(app.view_state_calls, 1)
+        self.assertEqual(app.assist_text_states, [app.last_view_state])
+        self.assertEqual(
+            app.flow_status_var.get(),
+            f"流向辅助：{app.last_view_state.summary}",
+        )
+        self.assertEqual(
+            app.flow_assist_var.get().splitlines()[0],
+            app.last_view_state.summary,
+        )
+
+    def test_apply_preview_mode_switch_reuses_tool_change_view_state(self) -> None:
+        app = ApplyPreviewModeSwitchHarness()
+
+        app.apply_flow_preview()
+
+        self.assertEqual(app.mode_var.get(), "flow")
+        self.assertEqual(app.view_state_calls, 1)
+        self.assertIs(app.text_view_state, app.view_state)
 
 
 if __name__ == "__main__":

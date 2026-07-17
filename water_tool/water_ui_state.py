@@ -86,17 +86,18 @@ class UIStateMixin:
 
     def on_mode_changed(self) -> None:
         self.tool_var.set("brush")
-        self.on_tool_changed()
         if self.active_mode() != "flow":
             self._reset_flow_selection_state()
             self._reset_flow_preview_state()
             self._reset_flow_marker_state()
+        view_state = self.on_tool_changed()
+        self._update_flow_assist_text(view_state)
         self._maybe_setup_transformer()
         self._invalidate_viewport_cache()
         self.render(full=True)
         self.refresh_snapshot_list()
 
-    def on_tool_changed(self) -> None:
+    def on_tool_changed(self) -> FlowAssistViewState:
         is_stream = self.mode_var.get() == "stream"
         if not is_stream and self.tool_var.get() == "eraser":
             self.tool_var.set("brush")
@@ -108,6 +109,7 @@ class UIStateMixin:
         self.radio_eraser_tool.configure(state="normal" if is_stream else "disabled")
         view_state = self._refresh_flow_controls()
         self._update_shortcut_hint(view_state)
+        return view_state
 
     def _refresh_flow_controls(self, view_state: Optional[FlowAssistViewState] = None) -> FlowAssistViewState:
         if view_state is None:

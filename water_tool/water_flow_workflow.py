@@ -737,10 +737,12 @@ class FlowWorkflowMixin:
         self._reset_flow_preview_state()
         if self.active_mode() != "flow":
             self.mode_var.set("flow")
-            self.on_tool_changed()
+            view_state = self.on_tool_changed()
             self._invalidate_viewport_cache()
             self.refresh_snapshot_list()
-        self._refresh_flow_assist_ui()
+            self._update_flow_assist_text(view_state)
+        else:
+            self._refresh_flow_assist_ui()
         self.flush_pending_render(force=True)
         self.info_var.set(applied_message)
 
