@@ -365,6 +365,8 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertEqual(app.btn_remove_locked_region.configure_calls[-1]["state"], "normal")
         self.assertEqual(app.btn_reverse_segment.configure_calls[-1]["state"], "normal")
         self.assertEqual(app.btn_apply_flow_preview.configure_calls[-1]["state"], "normal")
+        self.assertEqual(app.btn_flow_apply.configure_calls[-1]["state"], "normal")
+        self.assertEqual(app.btn_flow_apply.configure_calls[-1]["text"], "apply")
         self.assertEqual(app.btn_preview_segment.configure_calls[-1]["state"], "disabled")
         self.assertEqual(app.btn_clear_flow_preview.configure_calls[-1]["state"], "disabled")
         self.assertEqual(app.btn_confirm_segment.configure_calls[-1]["state"], "normal")
