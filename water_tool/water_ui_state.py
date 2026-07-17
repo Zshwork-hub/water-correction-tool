@@ -50,6 +50,7 @@ def build_flow_assist_facts(
 class UIStateMixin:
     def _flow_assist_view_state(self) -> FlowAssistViewState:
         locked_cells = self._locked_flow_cells_set()
+        preview = self.flow_preview_state
         has_selected_cell = self.selected_flow_cell is not None
         has_selected_region = self.selected_flow_region is not None
         selection_in_locked = (
@@ -64,11 +65,7 @@ class UIStateMixin:
             if hasattr(self, "_dem_cache_is_running")
             else False
         )
-        dem_conflicts = (
-            len(self._dem_conflict_scores())
-            if hasattr(self, "_dem_conflict_scores")
-            else 0
-        )
+        dem_conflicts = int(preview.dem_score_summary.get("uphill", 0))
         facts = build_flow_assist_facts(
             has_stream=self.stream_raster is not None,
             has_flow=self.flow_raster is not None,
@@ -79,7 +76,7 @@ class UIStateMixin:
             locked_count=len(locked_cells),
             outlet_set=self.flow_skeleton_outlet is not None,
             preview_target=self.flow_preview_target_var.get(),
-            preview=self.flow_preview_state,
+            preview=preview,
             dem_cache_ready=dem_cache_ready,
             dem_running=dem_running,
             dem_conflicts=dem_conflicts,

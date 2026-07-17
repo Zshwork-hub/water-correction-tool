@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
+from water_tool.water_flow_workflow import FlowWorkflowMixin
+from water_tool.water_state import FlowPreviewState
 from water_tool.water_ui_commands import CommandId
 from water_tool.water_ui_model import (
     FlowAssistFacts,
     FlowAssistStage,
     derive_flow_assist_state,
 )
-from water_tool.water_ui_state import build_flow_assist_facts
+from water_tool.water_ui_state import UIStateMixin, build_flow_assist_facts
 
 
 class FakePreview:
@@ -17,6 +20,41 @@ class FakePreview:
 
     def has_preview(self) -> bool:
         return True
+
+
+class FakePreviewTarget:
+    def get(self) -> str:
+        return "confluence"
+
+
+class FlowAssistViewStateHarness(UIStateMixin, FlowWorkflowMixin):
+    def __init__(self) -> None:
+        self.confirmed_flow_segment_cells = {
+            "first": [(1, 1), (1, 2)],
+            "second": [(1, 2), (2, 2)],
+        }
+        self.selected_flow_cell = (1, 2)
+        self.selected_flow_region = (0, 2, 0, 2)
+        self.flow_skeleton_outlet = (2, 2)
+        self.flow_preview_target_var = FakePreviewTarget()
+        self.stream_raster = object()
+        self.flow_raster = object()
+        self.dem_path = object()
+        self.dem_cache_arrays = object()
+        self.dem_cache_metadata = object()
+        self.flow_preview_state = FlowPreviewState.create(
+            [(3, 3, 1), (3, 4, 2)],
+            label="周边汇流",
+            kind="confluence",
+        )
+        self.flow_preview_state.dem_score_details = [object()]
+        self.flow_preview_state.dem_score_summary = {"uphill": 2}
+
+    def _dem_cache_is_running(self) -> bool:
+        return False
+
+    def _dem_conflict_scores(self) -> None:
+        raise AssertionError("view-state adaptation must not scan DEM score details")
 
 
 class FlowAssistUiModelTests(unittest.TestCase):
@@ -186,6 +224,55 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertTrue(facts.dem_scores_ready)
         self.assertEqual(facts.dem_conflicts, 2)
         self.assertEqual(facts.preview_target, "confluence")
+
+    def test_flow_assist_view_state_adapts_harness_without_scanning_scores(self) -> None:
+        app = FlowAssistViewStateHarness()
+        captured_facts = []
+
+        def derive_and_capture(facts: FlowAssistFacts):
+            captured_facts.append(facts)
+            return derive_flow_assist_state(facts)
+
+        with patch(
+            "water_tool.water_ui_state.derive_flow_assist_state",
+            side_effect=derive_and_capture,
+        ):
+            state = app._flow_assist_view_state()
+            ready_facts = captured_facts[-1]
+            app.dem_cache_metadata = None
+            without_cache_state = app._flow_assist_view_state()
+            without_cache_facts = captured_facts[-1]
+
+        self.assertTrue(ready_facts.has_stream)
+        self.assertTrue(ready_facts.has_flow)
+        self.assertEqual(ready_facts.locked_count, 3)
+        self.assertTrue(ready_facts.has_selected_cell)
+        self.assertTrue(ready_facts.has_selected_region)
+        self.assertTrue(ready_facts.selection_in_locked)
+        self.assertTrue(ready_facts.outlet_set)
+        self.assertEqual(ready_facts.preview_target, "confluence")
+        self.assertTrue(ready_facts.has_dem)
+        self.assertTrue(ready_facts.dem_cache_ready)
+        self.assertFalse(ready_facts.dem_running)
+        self.assertTrue(ready_facts.preview_exists)
+        self.assertEqual(ready_facts.preview_changes, 2)
+        self.assertTrue(ready_facts.dem_scores_ready)
+        self.assertEqual(ready_facts.dem_conflicts, 2)
+
+        self.assertEqual(state.stage, FlowAssistStage.REVIEW)
+        self.assertEqual(state.primary_command, CommandId.APPLY_FLOW_PREVIEW)
+        self.assertTrue(state.enabled[CommandId.ADD_SELECTED_RIVERS])
+        self.assertTrue(state.enabled[CommandId.SET_DOWNSTREAM_OUTLET])
+        self.assertTrue(state.enabled[CommandId.GENERATE_FLOW_PREVIEW])
+        self.assertTrue(state.enabled[CommandId.EVALUATE_DEM_PREVIEW])
+        self.assertTrue(state.enabled[CommandId.LOCATE_NEXT_UPHILL])
+        self.assertTrue(state.enabled[CommandId.EXPORT_DEM_REPORT])
+        self.assertEqual(state.summary, "预览待修改 2，逆坡冲突 2")
+
+        self.assertFalse(without_cache_facts.dem_cache_ready)
+        self.assertFalse(
+            without_cache_state.enabled[CommandId.EVALUATE_DEM_PREVIEW]
+        )
 
 
 if __name__ == "__main__":
