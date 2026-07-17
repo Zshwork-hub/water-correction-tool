@@ -96,6 +96,24 @@ class FlowStatusHarness(FlowStatusMixin):
         return {"brush": "B", "eraser": "E"}[action]
 
 
+class FlowAssistUiRefreshHarness(FlowStatusMixin):
+    def __init__(self) -> None:
+        self.view_state = object()
+        self.view_state_calls = 0
+        self.text_view_state = None
+        self.controls_view_state = None
+
+    def _flow_assist_view_state(self):
+        self.view_state_calls += 1
+        return self.view_state
+
+    def _update_flow_assist_text(self, view_state=None) -> None:
+        self.text_view_state = view_state
+
+    def _refresh_flow_controls(self, view_state=None) -> None:
+        self.controls_view_state = view_state
+
+
 class FlowAssistViewStateHarness(UIStateMixin, FlowWorkflowMixin):
     def __init__(self) -> None:
         self.confirmed_flow_segment_cells = {
@@ -145,6 +163,7 @@ class FlowControlRefreshHarness(UIStateMixin):
             CommandId.CLEAR_FLOW_PREVIEW: False,
             CommandId.RESET_FLOW_ASSIST: True,
         }
+        self.view_state = type("FakeViewState", (), {"enabled": self.enabled})()
         for name in (
             "btn_flow_preview",
             "btn_flow_apply",
@@ -166,7 +185,7 @@ class FlowControlRefreshHarness(UIStateMixin):
 
     def _flow_assist_view_state(self):
         self.view_state_calls += 1
-        return type("FakeViewState", (), {"enabled": self.enabled})()
+        return self.view_state
 
     def _flow_apply_button_text(self) -> str:
         return "apply"
@@ -454,6 +473,15 @@ class FlowAssistUiModelTests(unittest.TestCase):
             "周边预览 需修改 2 / 已一致 1  DEM 逆坡 1",
         )
 
+    def test_unified_flow_assist_refresh_reuses_one_view_state(self) -> None:
+        app = FlowAssistUiRefreshHarness()
+
+        app._refresh_flow_assist_ui()
+
+        self.assertEqual(app.view_state_calls, 1)
+        self.assertIs(app.text_view_state, app.view_state)
+        self.assertIs(app.controls_view_state, app.view_state)
+
 
     def test_refresh_flow_controls_consumes_model_enablement_once(self) -> None:
         app = FlowControlRefreshHarness()
@@ -473,6 +501,14 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertEqual(app.btn_clear_flow_preview.configure_calls[-1]["state"], "disabled")
         self.assertEqual(app.btn_confirm_segment.configure_calls[-1]["state"], "normal")
         self.assertEqual(app.btn_clear_flow_marks.configure_calls[-1]["state"], "normal")
+
+    def test_refresh_flow_controls_reuses_supplied_view_state(self) -> None:
+        app = FlowControlRefreshHarness()
+
+        app._refresh_flow_controls(app.view_state)
+
+        self.assertEqual(app.view_state_calls, 0)
+        self.assertIs(app.status_view_state, app.view_state)
 
 
 if __name__ == "__main__":

@@ -208,8 +208,7 @@ class FlowWorkflowMixin:
             self.flow_skeleton_outlet = None
         self._reset_flow_selection_state(clear_cell=False, clear_region=False, clear_segment=True)
         self._reset_flow_preview_state()
-        self._update_flow_assist_text()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         self.render(full=False)
 
     def _remove_locked_flow_cells(self, cells_to_remove: Set[Tuple[int, int]]) -> None:
@@ -226,8 +225,7 @@ class FlowWorkflowMixin:
             self.flow_skeleton_outlet = None
         self._reset_flow_preview_state()
         self._reset_flow_selection_state(clear_cell=False, clear_region=True, clear_segment=False)
-        self._update_flow_assist_text()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         self.render(full=False)
 
     def _locked_group_key(self, cells: List[Tuple[int, int]]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
@@ -422,8 +420,7 @@ class FlowWorkflowMixin:
 
     def clear_flow_segment_state(self) -> None:
         self._clear_flow_skeleton_state()
-        self._update_flow_assist_text()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         self.render(full=False)
         self.info_var.set("已取消当前锁定河道、出口和预览。")
 
@@ -447,8 +444,7 @@ class FlowWorkflowMixin:
             return
         self.flow_skeleton_outlet = cell
         self._reset_flow_preview_state()
-        self._update_flow_assist_text()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         self.render(full=False)
         self.info_var.set(f"已设置下游出口像元 {cell}，可点击“预览河道流向”。")
 
@@ -700,21 +696,22 @@ class FlowWorkflowMixin:
         )
         if hasattr(self, "update_dem_preview_coverage_hint"):
             self.update_dem_preview_coverage_hint()
-        self._update_flow_assist_text()
+        view_state = self._flow_assist_view_state()
+        self._update_flow_assist_text(view_state)
         if not self.flow_preview_state.has_preview():
             self.info_var.set(f"{label}: 没有可预览的像元")
         elif not self.flow_preview_state.has_apply_ops():
-            self._refresh_flow_controls()
+            self._refresh_flow_controls(view_state)
             self.info_var.set(f"{label}: 没有需要修改的像元，已一致 {self.flow_preview_state.unchanged_count} 个")
             self.render(full=True)
             return
         else:
-            self._refresh_flow_controls()
+            self._refresh_flow_controls(view_state)
             unchanged_text = f"，已一致 {self.flow_preview_state.unchanged_count} 个" if self.flow_preview_state.unchanged_ops else ""
             self.info_var.set(f"{label}: 需修改 {self.flow_preview_state.change_count} 个{unchanged_text}，点击“{self._flow_apply_button_text()}”写入橙色像元")
             self.render(full=True)
             return
-        self._refresh_flow_controls()
+        self._refresh_flow_controls(view_state)
         self.render(full=True)
 
     def apply_flow_preview(self) -> None:
@@ -806,8 +803,7 @@ class FlowWorkflowMixin:
 
     def clear_flow_preview(self) -> None:
         self._reset_flow_preview_state()
-        self._update_flow_assist_text()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         self.render(full=False)
 
     def _suggest_flow_candidates(self, raster: RasterData, row: int, col: int) -> List[int]:

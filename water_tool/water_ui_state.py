@@ -109,8 +109,9 @@ class UIStateMixin:
         self._refresh_flow_controls()
         self._update_shortcut_hint()
 
-    def _refresh_flow_controls(self) -> None:
-        view_state = self._flow_assist_view_state()
+    def _refresh_flow_controls(self, view_state: Optional[FlowAssistViewState] = None) -> None:
+        if view_state is None:
+            view_state = self._flow_assist_view_state()
         enabled = view_state.enabled
         has_flow_data = self.stream_raster is not None and self.flow_raster is not None
         locked_ready = bool(self.confirmed_flow_segments)
@@ -143,8 +144,7 @@ class UIStateMixin:
     def on_river_flow_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
         if self.flow_preview_state.kind == "river_skeleton":
             self._reset_flow_preview_state()
-            self._update_flow_assist_text()
-            self._refresh_flow_controls()
+            self._refresh_flow_assist_ui()
             self.render(full=True)
             self.info_var.set("河道流向计算模式已切换，请重新点击“预览河道流向”。")
 
@@ -153,8 +153,7 @@ class UIStateMixin:
             self._reset_flow_preview_state()
             self.render(full=True)
         self._update_confluence_hint()
-        self._update_flow_assist_text()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         if self.confluence_mode_var.get() == "范围SHP":
             self.info_var.set("范围SHP模式：先加载范围SHP并锁定范围内河道；最大距为0表示不限距离。")
         else:

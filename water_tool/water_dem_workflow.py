@@ -264,8 +264,7 @@ class DemWorkflowMixin:
         coverage_text = self._format_dem_cache_coverage(scores)
         self.dem_score_status_var.set(f"{coverage_text}；{preview.dem_score_label}")
         self.info_var.set(f"DEM评估完成：{coverage_text}；{preview.dem_score_label}")
-        self._update_flow_assist_text()
-        self._refresh_flow_controls()
+        self._refresh_flow_assist_ui()
         self.render(full=False)
 
     def locate_next_dem_conflict(self) -> None:

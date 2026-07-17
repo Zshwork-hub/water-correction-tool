@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import Optional
+
+from .water_ui_model import FlowAssistViewState
+
 
 class FlowStatusMixin:
-    def update_mode_status(self, view_state=None) -> None:
+    def update_mode_status(self, view_state: Optional[FlowAssistViewState] = None) -> None:
         if not hasattr(self, "mode_status_var"):
             return
         if view_state is None:
@@ -22,7 +26,7 @@ class FlowStatusMixin:
     def _flow_apply_button_text(self) -> str:
         return self.flow_preview_state.apply_button_text()
 
-    def _update_flow_assist_text(self, view_state=None) -> None:
+    def _update_flow_assist_text(self, view_state: Optional[FlowAssistViewState] = None) -> None:
         if view_state is None:
             view_state = self._flow_assist_view_state()
         preview = self.flow_preview_state
@@ -44,6 +48,11 @@ class FlowStatusMixin:
             f"{view_state.summary}\n"
             f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {distance_text}  {preview_detail}"
         )
+
+    def _refresh_flow_assist_ui(self) -> None:
+        view_state = self._flow_assist_view_state()
+        self._update_flow_assist_text(view_state)
+        self._refresh_flow_controls(view_state)
 
     def _flow_next_step_text(self) -> str:
         if self.stream_raster is None or self.flow_raster is None:
