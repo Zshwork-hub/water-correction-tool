@@ -27,6 +27,7 @@ class FlowAssistFacts:
     preview_target: str = "river"
     preview_exists: bool = False
     preview_changes: int = 0
+    has_dem: bool = False
     dem_cache_ready: bool = False
     dem_running: bool = False
     dem_scores_ready: bool = False
@@ -58,14 +59,16 @@ def derive_flow_assist_state(facts: FlowAssistFacts) -> FlowAssistViewState:
         CommandId.GENERATE_FLOW_PREVIEW: can_generate,
         CommandId.APPLY_FLOW_PREVIEW: facts.preview_exists and facts.preview_changes > 0,
         CommandId.CLEAR_FLOW_PREVIEW: facts.preview_exists,
-        CommandId.BUILD_DEM_CACHE: locked_ready and not facts.dem_running,
+        CommandId.BUILD_DEM_CACHE: (
+            locked_ready and facts.has_dem and not facts.dem_running
+        ),
         CommandId.CANCEL_DEM_CACHE: facts.dem_running,
         CommandId.EVALUATE_DEM_PREVIEW: (
             facts.preview_exists and facts.dem_cache_ready and not facts.dem_running
         ),
-        CommandId.LOCATE_NEXT_UPHILL: facts.dem_conflicts > 0,
-        CommandId.EXPORT_DEM_REPORT: facts.dem_scores_ready,
-        CommandId.EXPORT_UPHILL_CONFLICTS: facts.dem_conflicts > 0,
+        CommandId.LOCATE_NEXT_UPHILL: facts.dem_conflicts > 0 and not facts.dem_running,
+        CommandId.EXPORT_DEM_REPORT: facts.dem_scores_ready and not facts.dem_running,
+        CommandId.EXPORT_UPHILL_CONFLICTS: facts.dem_conflicts > 0 and not facts.dem_running,
     }
     enabled = MappingProxyType(enabled_values)
 

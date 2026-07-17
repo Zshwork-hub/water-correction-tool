@@ -92,6 +92,28 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertIn("逆坡冲突 3", state.summary)
         self.assertTrue(state.enabled[CommandId.LOCATE_NEXT_UPHILL])
 
+    def test_build_dem_cache_requires_a_loaded_dem(self) -> None:
+        without_dem = derive_flow_assist_state(FlowAssistFacts(locked_count=2))
+        with_dem = derive_flow_assist_state(
+            FlowAssistFacts(locked_count=2, has_dem=True)
+        )
+
+        self.assertFalse(without_dem.enabled[CommandId.BUILD_DEM_CACHE])
+        self.assertTrue(with_dem.enabled[CommandId.BUILD_DEM_CACHE])
+
+    def test_dem_result_actions_are_disabled_while_cache_is_running(self) -> None:
+        state = derive_flow_assist_state(
+            FlowAssistFacts(
+                dem_running=True,
+                dem_scores_ready=True,
+                dem_conflicts=2,
+            )
+        )
+
+        self.assertFalse(state.enabled[CommandId.LOCATE_NEXT_UPHILL])
+        self.assertFalse(state.enabled[CommandId.EXPORT_DEM_REPORT])
+        self.assertFalse(state.enabled[CommandId.EXPORT_UPHILL_CONFLICTS])
+
     def test_command_enablement_is_derived_from_independent_facts(self) -> None:
         state = derive_flow_assist_state(
             FlowAssistFacts(
@@ -104,6 +126,7 @@ class FlowAssistUiModelTests(unittest.TestCase):
                 outlet_set=True,
                 preview_exists=True,
                 preview_changes=1,
+                has_dem=True,
                 dem_cache_ready=True,
                 dem_running=False,
                 dem_scores_ready=True,
