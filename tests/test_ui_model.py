@@ -8,6 +8,15 @@ from water_tool.water_ui_model import (
     FlowAssistStage,
     derive_flow_assist_state,
 )
+from water_tool.water_ui_state import build_flow_assist_facts
+
+
+class FakePreview:
+    change_count = 5
+    dem_score_details = [object(), object()]
+
+    def has_preview(self) -> bool:
+        return True
 
 
 class FlowAssistUiModelTests(unittest.TestCase):
@@ -152,6 +161,31 @@ class FlowAssistUiModelTests(unittest.TestCase):
         }
 
         self.assertEqual(state.enabled, expected)
+
+    def test_build_flow_assist_facts_preserves_application_state(self) -> None:
+        facts = build_flow_assist_facts(
+            has_stream=True,
+            has_flow=True,
+            has_dem=True,
+            has_selected_cell=True,
+            has_selected_region=False,
+            selection_in_locked=True,
+            locked_count=8,
+            outlet_set=True,
+            preview_target="confluence",
+            preview=FakePreview(),
+            dem_cache_ready=True,
+            dem_running=False,
+            dem_conflicts=2,
+        )
+
+        self.assertEqual(facts.locked_count, 8)
+        self.assertTrue(facts.has_dem)
+        self.assertTrue(facts.preview_exists)
+        self.assertEqual(facts.preview_changes, 5)
+        self.assertTrue(facts.dem_scores_ready)
+        self.assertEqual(facts.dem_conflicts, 2)
+        self.assertEqual(facts.preview_target, "confluence")
 
 
 if __name__ == "__main__":

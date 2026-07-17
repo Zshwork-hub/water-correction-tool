@@ -453,6 +453,7 @@ class FlowWorkflowMixin:
         self.info_var.set(f"已设置下游出口像元 {cell}，可点击“预览河道流向”。")
 
     def preview_locked_river_flow(self) -> None:
+        self.flow_preview_target_var.set("river")
         if self.flow_raster is None:
             messagebox.showwarning("提示", "请先加载流向ASC。")
             return
@@ -602,6 +603,7 @@ class FlowWorkflowMixin:
         self._refresh_flow_controls()
 
     def preview_confirmed_confluence(self) -> None:
+        self.flow_preview_target_var.set("confluence")
         assistant = self._flow_assistant()
         if assistant is None:
             return

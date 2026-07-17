@@ -105,6 +105,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.confluence_max_distance_var = tk.IntVar(value=30)
         self.confluence_hint_var = tk.StringVar(value="")
         self.river_flow_mode_var = tk.StringVar(value="平滑")
+        self.flow_preview_target_var = tk.StringVar(value="river")
 
         self.stream_palette: Dict[str, RGBA] = {
             "nodata": (245, 245, 245, 255),

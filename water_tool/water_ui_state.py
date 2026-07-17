@@ -4,8 +4,88 @@ from typing import Optional
 
 import tkinter as tk
 
+from .water_state import FlowPreviewState
+from .water_ui_model import (
+    FlowAssistFacts,
+    FlowAssistViewState,
+    derive_flow_assist_state,
+)
+
+
+def build_flow_assist_facts(
+    *,
+    has_stream: bool,
+    has_flow: bool,
+    has_dem: bool,
+    has_selected_cell: bool,
+    has_selected_region: bool,
+    selection_in_locked: bool,
+    locked_count: int,
+    outlet_set: bool,
+    preview_target: str,
+    preview: FlowPreviewState,
+    dem_cache_ready: bool,
+    dem_running: bool,
+    dem_conflicts: int,
+) -> FlowAssistFacts:
+    return FlowAssistFacts(
+        has_stream=has_stream,
+        has_flow=has_flow,
+        has_dem=has_dem,
+        has_selected_cell=has_selected_cell,
+        has_selected_region=has_selected_region,
+        selection_in_locked=selection_in_locked,
+        locked_count=locked_count,
+        outlet_set=outlet_set,
+        preview_target=preview_target,
+        preview_exists=preview.has_preview(),
+        preview_changes=preview.change_count,
+        dem_cache_ready=dem_cache_ready,
+        dem_running=dem_running,
+        dem_scores_ready=bool(getattr(preview, "dem_score_details", [])),
+        dem_conflicts=dem_conflicts,
+    )
+
 
 class UIStateMixin:
+    def _flow_assist_view_state(self) -> FlowAssistViewState:
+        locked_cells = self._locked_flow_cells_set()
+        has_selected_cell = self.selected_flow_cell is not None
+        has_selected_region = self.selected_flow_region is not None
+        selection_in_locked = (
+            self.selected_flow_cell in locked_cells if has_selected_cell else False
+        )
+        dem_cache_ready = (
+            getattr(self, "dem_cache_arrays", None) is not None
+            and getattr(self, "dem_cache_metadata", None) is not None
+        )
+        dem_running = (
+            self._dem_cache_is_running()
+            if hasattr(self, "_dem_cache_is_running")
+            else False
+        )
+        dem_conflicts = (
+            len(self._dem_conflict_scores())
+            if hasattr(self, "_dem_conflict_scores")
+            else 0
+        )
+        facts = build_flow_assist_facts(
+            has_stream=self.stream_raster is not None,
+            has_flow=self.flow_raster is not None,
+            has_dem=getattr(self, "dem_path", None) is not None,
+            has_selected_cell=has_selected_cell,
+            has_selected_region=has_selected_region,
+            selection_in_locked=selection_in_locked,
+            locked_count=len(locked_cells),
+            outlet_set=self.flow_skeleton_outlet is not None,
+            preview_target=self.flow_preview_target_var.get(),
+            preview=self.flow_preview_state,
+            dem_cache_ready=dem_cache_ready,
+            dem_running=dem_running,
+            dem_conflicts=dem_conflicts,
+        )
+        return derive_flow_assist_state(facts)
+
     def on_mode_changed(self) -> None:
         self.tool_var.set("brush")
         self.on_tool_changed()
