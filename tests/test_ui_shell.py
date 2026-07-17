@@ -3,7 +3,16 @@ from __future__ import annotations
 import unittest
 
 from water_tool.water_project_panel import ProjectDataDialog
-from water_tool.water_shell_model import NAV_ITEMS, PROJECT_DATA_ITEMS, NavigationId, navigation_mode, shell_metrics
+from water_tool.water_shell_model import (
+    NAV_ITEMS,
+    PROJECT_DATA_ITEMS,
+    STREAM_CONTROL_KEYS,
+    STREAM_PAGE_COMMANDS,
+    NavigationId,
+    navigation_mode,
+    shell_metrics,
+)
+from water_tool.water_stream_page import build_stream_page
 from water_tool.water_ui_shell import UiShellHandles
 from water_tool.water_ui_commands import CommandId
 from water_tool.water_ui_components import ScrollableTaskPanel, normalize_wheel_steps
@@ -67,6 +76,29 @@ class ShellModelTests(unittest.TestCase):
         self.assertTrue(pages[NavigationId.DISPLAY].visible)
         self.assertFalse(pages[NavigationId.STREAM].visible)
         self.assertEqual(navigation.selected, NavigationId.DISPLAY)
+
+    def test_stream_page_has_one_data_command(self) -> None:
+        self.assertEqual(STREAM_PAGE_COMMANDS, (CommandId.APPLY_VECTOR_CORRECTION,))
+
+    def test_stream_page_exposes_required_compatibility_controls(self) -> None:
+        self.assertEqual(
+            STREAM_CONTROL_KEYS,
+            (
+                "radio_brush_tool",
+                "radio_eraser_tool",
+                "brush_size_spin",
+                "btn_shortcuts",
+                "btn_vector_batch",
+                "vector_hint",
+            ),
+        )
+
+    def test_stream_page_builder_keeps_flow_controls_out(self) -> None:
+        import inspect
+
+        source = inspect.getsource(build_stream_page)
+        for forbidden in ("direction_box", "flow_suggest", "locked", "outlet", "dem_"):
+            self.assertNotIn(forbidden, source.lower())
 
     def test_project_data_items_have_stable_order_and_commands(self) -> None:
         expected = [

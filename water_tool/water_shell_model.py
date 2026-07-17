@@ -43,6 +43,19 @@ PROJECT_DATA_ITEMS: Tuple[ProjectDataItem, ...] = (
     ProjectDataItem("dem", "DEM", CommandId.LOAD_DEM),
 )
 
+STREAM_PAGE_COMMANDS: Tuple[CommandId, ...] = (
+    CommandId.APPLY_VECTOR_CORRECTION,
+)
+
+STREAM_CONTROL_KEYS: Tuple[str, ...] = (
+    "radio_brush_tool",
+    "radio_eraser_tool",
+    "brush_size_spin",
+    "btn_shortcuts",
+    "btn_vector_batch",
+    "vector_hint",
+)
+
 
 @dataclass(frozen=True)
 class ShellMetrics:
