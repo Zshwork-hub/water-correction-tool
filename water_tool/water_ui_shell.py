@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 from tkinter import ttk
 
@@ -11,6 +11,22 @@ from .water_ui_commands import CommandId, get_command
 from .water_ui_components import NavigationRail
 
 
+def merge_control_registries(*registries: dict[str, object]) -> dict[str, object]:
+    merged: dict[str, object] = {}
+    for registry in registries:
+        duplicates = set(merged).intersection(registry)
+        if duplicates:
+            names = ", ".join(sorted(duplicates))
+            raise ValueError(f"控件注册表存在重复键: {names}")
+        merged.update(registry)
+    return merged
+
+
+def bind_control_registry(app, controls: dict[str, object]) -> None:
+    for name, control in controls.items():
+        setattr(app, name, control)
+
+
 @dataclass
 class UiShellHandles:
     navigation: NavigationRail
@@ -18,6 +34,8 @@ class UiShellHandles:
     page_host: ttk.Frame
     status_bar: ttk.Frame
     pages: Dict[NavigationId, ttk.Frame]
+    shell_frame: Optional[ttk.Frame] = None
+    content_frame: Optional[ttk.Frame] = None
 
     def show_page(self, navigation_id: NavigationId) -> None:
         navigation_id = NavigationId(navigation_id)
@@ -53,6 +71,7 @@ def build_application_shell(app) -> UiShellHandles:
     toolbar.grid(row=0, column=0, sticky="ew")
 
     project_data = ttk.Button(toolbar, text="项目与数据", command=app.open_project_data_panel)
+    app.btn_project_data = project_data
     project_data.pack(side="left", padx=(0, 4))
     ToolTip(project_data, "集中查看、加载或替换河道、流向、参考线、汇流范围和 DEM 数据。")
     app.btn_open_project = _command_button(toolbar, CommandId.OPEN_PROJECT, app.open_project_dialog)
@@ -83,6 +102,7 @@ def build_application_shell(app) -> UiShellHandles:
         command=app.update_mode_status,
     )
     app.chk_autosave.pack(side="right")
+    ToolTip(app.chk_autosave, "启用或关闭定时自动保存。")
 
     content = ttk.Frame(shell, style="App.TFrame", padding=(8, 8, 8, 0))
     content.grid(row=1, column=0, sticky="nsew")
@@ -117,4 +137,4 @@ def build_application_shell(app) -> UiShellHandles:
         row=0, column=1, sticky="e"
     )
 
-    return UiShellHandles(navigation, map_frame, page_host, status_bar, {})
+    return UiShellHandles(navigation, map_frame, page_host, status_bar, {}, shell, content)

@@ -17,7 +17,7 @@ from water_tool.water_shell_model import (
 )
 from water_tool.water_legacy_pages import build_display_page, build_flow_compatibility_page, build_history_page
 from water_tool.water_stream_page import build_stream_page
-from water_tool.water_ui_shell import UiShellHandles
+from water_tool.water_ui_shell import UiShellHandles, bind_control_registry, merge_control_registries
 from water_tool.water_ui_commands import CommandId
 from water_tool.water_ui_components import ScrollableTaskPanel, normalize_wheel_steps
 from water_tool.water_ui_theme import UI_COLORS, UI_SPACING, apply_ui_theme
@@ -46,6 +46,41 @@ class ShellModelTests(unittest.TestCase):
                 (NavigationId.HISTORY, "历史与恢复"),
             ],
         )
+
+    def test_control_registries_bind_once_and_reject_duplicates(self) -> None:
+        class DummyApp:
+            pass
+
+        app = DummyApp()
+        controls = merge_control_registries(
+            {"btn_vector_batch": object()},
+            {"direction_box": object()},
+        )
+        bind_control_registry(app, controls)
+
+        self.assertIs(app.btn_vector_batch, controls["btn_vector_batch"])
+        self.assertIs(app.direction_box, controls["direction_box"])
+        with self.assertRaises(ValueError):
+            merge_control_registries({"shared": object()}, {"shared": object()})
+
+    def test_final_build_ui_delegates_without_notebook(self) -> None:
+        import inspect
+
+        from water_tool.water_app import WaterCorrectionApp
+
+        source = inspect.getsource(WaterCorrectionApp._build_ui)
+        self.assertIn("build_application_shell", source)
+        self.assertNotIn("ttk.Notebook", source)
+        self.assertNotIn("radio_stream", source)
+        self.assertNotIn("radio_flow", source)
+
+    def test_project_and_autosave_restore_synchronize_edit_navigation(self) -> None:
+        import inspect
+
+        from water_tool.water_project_workflow import ProjectWorkflowMixin
+
+        self.assertIn("_show_edit_navigation", inspect.getsource(ProjectWorkflowMixin.open_project))
+        self.assertIn("_show_edit_navigation", inspect.getsource(ProjectWorkflowMixin._restore_autosave))
 
     def test_navigation_changes_edit_mode_only_for_edit_pages(self) -> None:
         self.assertEqual(navigation_mode(NavigationId.DISPLAY, "flow"), "flow")

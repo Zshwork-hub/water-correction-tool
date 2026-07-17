@@ -151,6 +151,7 @@ class ProjectWorkflowMixin:
         mode = str(payload.get("mode", self.mode_var.get()))
         if mode in {"stream", "flow"}:
             self.mode_var.set(mode)
+            self._show_edit_navigation(mode)
         self.tool_var.set(str(payload.get("tool", self.tool_var.get())))
         self.direction_var.set(str(payload.get("direction", self.direction_var.get())))
         self.brush_size_var.set(int(payload.get("brush_size", self.brush_size_var.get())))
@@ -305,7 +306,10 @@ class ProjectWorkflowMixin:
                 self.original_flow_raster = parse_asc(self.flow_raster.path)
             if self.stream_raster is None and self.flow_raster is None:
                 return False
-            self.mode_var.set(str(meta.get("mode", self.mode_var.get())))
+            restored_mode = str(meta.get("mode", self.mode_var.get()))
+            if restored_mode in {"stream", "flow"}:
+                self.mode_var.set(restored_mode)
+                self._show_edit_navigation(restored_mode)
             self.tool_var.set(str(meta.get("tool", self.tool_var.get())))
             self.direction_var.set(str(meta.get("direction", self.direction_var.get())))
             self.brush_size_var.set(int(meta.get("brush_size", self.brush_size_var.get())))

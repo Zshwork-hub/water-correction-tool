@@ -4,6 +4,7 @@ from typing import Optional
 
 import tkinter as tk
 
+from .water_shell_model import NavigationId, navigation_mode
 from .water_state import FlowPreviewState
 from .water_ui_commands import CommandId
 from .water_ui_model import (
@@ -84,7 +85,30 @@ class UIStateMixin:
         )
         return derive_flow_assist_state(facts)
 
+    def on_navigation_changed(self) -> None:
+        navigation_id = NavigationId(self.navigation_var.get())
+        next_mode = navigation_mode(navigation_id, self.mode_var.get())
+        if next_mode != self.mode_var.get():
+            self.mode_var.set(next_mode)
+            self.on_mode_changed()
+        self.ui_shell.show_page(navigation_id)
+        self.update_mode_status()
+
+    def _show_edit_navigation(self, mode: str) -> None:
+        navigation_id = NavigationId(mode)
+        self.navigation_var.set(navigation_id.value)
+        if hasattr(self, "ui_shell"):
+            self.ui_shell.show_page(navigation_id)
+
     def on_mode_changed(self) -> None:
+        if hasattr(self, "navigation_var"):
+            current_navigation = NavigationId(self.navigation_var.get())
+            if current_navigation in {NavigationId.STREAM, NavigationId.FLOW}:
+                target_navigation = NavigationId(self.mode_var.get())
+                if target_navigation != current_navigation:
+                    self.navigation_var.set(target_navigation.value)
+                    if hasattr(self, "ui_shell"):
+                        self.ui_shell.show_page(target_navigation)
         self.tool_var.set("brush")
         if self.active_mode() != "flow":
             self._reset_flow_selection_state()
