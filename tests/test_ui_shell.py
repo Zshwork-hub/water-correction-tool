@@ -3,7 +3,8 @@ from __future__ import annotations
 import unittest
 
 from water_tool.water_project_panel import ProjectDataDialog
-from water_tool.water_shell_model import NAV_ITEMS, PROJECT_DATA_ITEMS, NavigationId, shell_metrics
+from water_tool.water_shell_model import NAV_ITEMS, PROJECT_DATA_ITEMS, NavigationId, navigation_mode, shell_metrics
+from water_tool.water_ui_shell import UiShellHandles
 from water_tool.water_ui_commands import CommandId
 from water_tool.water_ui_components import ScrollableTaskPanel, normalize_wheel_steps
 from water_tool.water_ui_theme import UI_COLORS, UI_SPACING, apply_ui_theme
@@ -32,6 +33,40 @@ class ShellModelTests(unittest.TestCase):
                 (NavigationId.HISTORY, "历史与恢复"),
             ],
         )
+
+    def test_navigation_changes_edit_mode_only_for_edit_pages(self) -> None:
+        self.assertEqual(navigation_mode(NavigationId.DISPLAY, "flow"), "flow")
+        self.assertEqual(navigation_mode(NavigationId.HISTORY, "stream"), "stream")
+        self.assertEqual(navigation_mode(NavigationId.STREAM, "flow"), "stream")
+        self.assertEqual(navigation_mode(NavigationId.FLOW, "stream"), "flow")
+
+    def test_shell_handles_show_only_requested_page(self) -> None:
+        class FakeFrame:
+            def __init__(self) -> None:
+                self.visible = False
+
+            def grid_remove(self) -> None:
+                self.visible = False
+
+            def grid(self, **_options) -> None:
+                self.visible = True
+
+        class FakeNavigation:
+            def __init__(self) -> None:
+                self.selected = None
+
+            def set_selected(self, navigation_id) -> None:
+                self.selected = navigation_id
+
+        pages = {item.navigation_id: FakeFrame() for item in NAV_ITEMS}
+        navigation = FakeNavigation()
+        handles = UiShellHandles(navigation, FakeFrame(), FakeFrame(), FakeFrame(), pages)
+
+        handles.show_page(NavigationId.DISPLAY)
+
+        self.assertTrue(pages[NavigationId.DISPLAY].visible)
+        self.assertFalse(pages[NavigationId.STREAM].visible)
+        self.assertEqual(navigation.selected, NavigationId.DISPLAY)
 
     def test_project_data_items_have_stable_order_and_commands(self) -> None:
         expected = [

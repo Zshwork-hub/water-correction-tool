@@ -52,6 +52,15 @@ class ShellMetrics:
     status_height: int
 
 
+def navigation_mode(navigation_id: NavigationId, current_mode: str) -> str:
+    navigation_id = NavigationId(navigation_id)
+    if navigation_id == NavigationId.STREAM:
+        return "stream"
+    if navigation_id == NavigationId.FLOW:
+        return "flow"
+    return current_mode
+
+
 def shell_metrics(width: int, height: int) -> ShellMetrics:
     safe_width = max(1024, int(width))
     navigation_width = 136 if safe_width <= 1366 else 156
