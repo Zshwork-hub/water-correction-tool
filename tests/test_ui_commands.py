@@ -6,11 +6,59 @@ from water_tool.water_ui_commands import COMMANDS, CommandId, get_command
 
 
 class UiCommandCatalogTests(unittest.TestCase):
-    def test_command_ids_and_labels_are_unique(self) -> None:
-        ids = [item.command_id for item in COMMANDS.values()]
+    def test_command_ids_are_complete_and_unique(self) -> None:
+        expected_names = {
+            "OPEN_PROJECT",
+            "SAVE_PROJECT",
+            "EXPORT_ASC",
+            "LOAD_STREAM_ASC",
+            "LOAD_FLOW_ASC",
+            "LOAD_RIVER_SHP",
+            "LOAD_CONFLUENCE_SHP",
+            "LOAD_DEM",
+            "UNDO",
+            "REDO",
+            "CREATE_SNAPSHOT",
+            "RESTORE_AUTOSAVE",
+            "FIT_CONTENT",
+            "CENTER_RIVER",
+            "WRITE_FLOW_DIRECTION",
+            "SUGGEST_FLOW_DIRECTION",
+            "APPLY_VECTOR_CORRECTION",
+            "ADD_SELECTED_RIVERS",
+            "ADD_SELECTED_CELL",
+            "ADD_POLYGON_RIVERS",
+            "REMOVE_SELECTED_RIVERS",
+            "RESET_FLOW_ASSIST",
+            "SET_DOWNSTREAM_OUTLET",
+            "GENERATE_FLOW_PREVIEW",
+            "APPLY_FLOW_PREVIEW",
+            "CLEAR_FLOW_PREVIEW",
+            "BUILD_DEM_CACHE",
+            "CANCEL_DEM_CACHE",
+            "EVALUATE_DEM_PREVIEW",
+            "LOCATE_NEXT_UPHILL",
+            "EXPORT_DEM_REPORT",
+            "EXPORT_UPHILL_CONFLICTS",
+        }
+        values = [item.value for item in CommandId.__members__.values()]
+
+        self.assertEqual(set(CommandId.__members__), expected_names)
+        self.assertEqual(len(CommandId.__members__), 32)
+        self.assertEqual(len(values), len(set(values)))
+
+    def test_catalog_contains_every_command_id_once(self) -> None:
+        expected_ids = set(CommandId)
+
+        self.assertEqual(set(COMMANDS), expected_ids)
+        self.assertEqual(
+            {item.command_id for item in COMMANDS.values()},
+            expected_ids,
+        )
+
+    def test_command_labels_are_unique(self) -> None:
         labels = [item.label for item in COMMANDS.values()]
 
-        self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(len(labels), len(set(labels)))
 
     def test_preview_and_reset_commands_explain_their_scope(self) -> None:
