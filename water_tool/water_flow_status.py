@@ -2,35 +2,29 @@ from __future__ import annotations
 
 
 class FlowStatusMixin:
-    def update_mode_status(self) -> None:
+    def update_mode_status(self, view_state=None) -> None:
         if not hasattr(self, "mode_status_var"):
             return
+        if view_state is None:
+            view_state = self._flow_assist_view_state()
         mode_text = "订正河道" if self.mode_var.get() == "stream" else "订正流向"
         tool_text = "画笔" if self.tool_var.get() == "brush" else "橡皮擦" if self.tool_var.get() == "eraser" else self.tool_var.get()
-        locked_count = len(self._locked_flow_cells_set()) if hasattr(self, "confirmed_flow_segment_cells") else 0
-        preview = self.flow_preview_state
-        if preview.has_preview():
-            preview_text = f"{preview.status_label()} 需修改 {preview.change_count} / 已一致 {preview.unchanged_count}"
-            if preview.dem_score_label:
-                preview_text += f"，DEM {preview.dem_score_label}"
-        else:
-            preview_text = "无预览"
-        outlet_text = f"出口 {self.flow_skeleton_outlet}" if self.flow_skeleton_outlet is not None else "未设出口"
         autosave_text = "开启" if self.autosave_var.get() else "关闭"
         stream_loaded = "已加载" if self.stream_raster is not None else "未加载"
         flow_loaded = "已加载" if self.flow_raster is not None else "未加载"
         dem_loaded = "已加载" if getattr(self, "dem_path", None) is not None else "未加载"
         dem_cache_text = self.dem_cache_status_var.get() if hasattr(self, "dem_cache_status_var") else "未生成"
-        range_loaded = "，范围SHP已加载" if self.confluence_polygon_layer is not None else ""
         self.mode_status_var.set(f"当前模式：{mode_text}")
         self.tool_status_var.set(f"当前工具：{tool_text}  快捷键 {self._shortcut_label('brush')}=画笔 / {self._shortcut_label('eraser')}=橡皮擦")
-        self.flow_status_var.set(f"流向辅助：锁定 {locked_count} 个河道像元，{outlet_text}，{preview_text}{range_loaded}；{self._flow_next_step_text()}")
+        self.flow_status_var.set(f"流向辅助：{view_state.summary}")
         self.session_status_var.set(f"数据：河道{stream_loaded}，流向{flow_loaded}，DEM{dem_loaded}；DEM缓存：{dem_cache_text}；自动保存{autosave_text}")
 
     def _flow_apply_button_text(self) -> str:
         return self.flow_preview_state.apply_button_text()
 
-    def _update_flow_assist_text(self) -> None:
+    def _update_flow_assist_text(self, view_state=None) -> None:
+        if view_state is None:
+            view_state = self._flow_assist_view_state()
         preview = self.flow_preview_state
         locked_cells = sum(len(cells) for cells in self.confirmed_flow_segment_cells.values())
         if locked_cells:
@@ -47,8 +41,8 @@ class FlowStatusMixin:
         else:
             preview_detail = "无预览"
         self.flow_assist_var.set(
-            f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {distance_text}  {preview_detail}\n"
-            f"{self._flow_next_step_text()}"
+            f"{view_state.summary}\n"
+            f"{selected}  {outlet}  汇流模式 {self.confluence_mode_var.get()}  {distance_text}  {preview_detail}"
         )
 
     def _flow_next_step_text(self) -> str:

@@ -136,7 +136,7 @@ class UIStateMixin:
         self.btn_clear_flow_marks.configure(state=state(enabled[CommandId.RESET_FLOW_ASSIST]))
         self.btn_apply_flow_preview.configure(state=state(enabled[CommandId.APPLY_FLOW_PREVIEW]), text=apply_text)
         self.btn_clear_flow_preview.configure(state=state(enabled[CommandId.CLEAR_FLOW_PREVIEW]))
-        self.update_mode_status()
+        self.update_mode_status(view_state)
         if hasattr(self, "_refresh_dem_controls"):
             self._refresh_dem_controls()
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+from water_tool.water_flow_status import FlowStatusMixin
 from water_tool.water_flow_workflow import FlowWorkflowMixin
 from water_tool.water_state import FlowPreviewState
 from water_tool.water_ui_commands import CommandId
@@ -35,12 +36,64 @@ class FakeButton:
         self.configure_calls.append(kwargs)
 
 
+class FakeVar:
+    def __init__(self, value=None) -> None:
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value) -> None:
+        self.value = value
+
+
 class FakeControlPreview:
     def has_apply_ops(self) -> bool:
         return False
 
     def has_preview(self) -> bool:
         return True
+
+
+class FlowStatusHarness(FlowStatusMixin):
+    def __init__(self) -> None:
+        self.mode_var = FakeVar("flow")
+        self.tool_var = FakeVar("brush")
+        self.autosave_var = FakeVar(True)
+        self.mode_status_var = FakeVar()
+        self.tool_status_var = FakeVar()
+        self.flow_status_var = FakeVar()
+        self.session_status_var = FakeVar()
+        self.flow_assist_var = FakeVar()
+        self.dem_cache_status_var = FakeVar("已生成")
+        self.confluence_mode_var = FakeVar("范围SHP")
+        self.confluence_max_distance_var = FakeVar(12)
+        self.stream_raster = object()
+        self.flow_raster = object()
+        self.dem_path = object()
+        self.confluence_polygon_layer = object()
+        self.confirmed_flow_segment_cells = {
+            "first": [(1, 1), (1, 2)],
+            "second": [(2, 2)],
+        }
+        self.confirmed_flow_segments = ["first", "second"]
+        self.flow_skeleton_outlet = (2, 2)
+        self.flow_preview_state = FlowPreviewState.create(
+            [(3, 3, 1), (3, 4, 2)],
+            unchanged_ops=[(4, 4, 4)],
+            label="周边汇流",
+            kind="confluence",
+        )
+        self.flow_preview_state.dem_score_label = "逆坡 1"
+
+    def _flow_assist_view_state(self):
+        raise AssertionError("supplied view state must be reused")
+
+    def _locked_flow_cells_set(self):
+        return {(1, 1), (1, 2), (2, 2)}
+
+    def _shortcut_label(self, action: str) -> str:
+        return {"brush": "B", "eraser": "E"}[action]
 
 
 class FlowAssistViewStateHarness(UIStateMixin, FlowWorkflowMixin):
@@ -84,6 +137,7 @@ class FlowControlRefreshHarness(UIStateMixin):
         self.flow_preview_state = FakeControlPreview()
         self.view_state_calls = 0
         self.update_mode_status_calls = 0
+        self.status_view_state = None
         self.enabled = {
             CommandId.ADD_SELECTED_CELL: True,
             CommandId.REMOVE_SELECTED_RIVERS: True,
@@ -117,17 +171,34 @@ class FlowControlRefreshHarness(UIStateMixin):
     def _flow_apply_button_text(self) -> str:
         return "apply"
 
-    def update_mode_status(self) -> None:
+    def update_mode_status(self, view_state=None) -> None:
         self.update_mode_status_calls += 1
+        self.status_view_state = view_state
 
 
 class FlowAssistUiModelTests(unittest.TestCase):
     def test_missing_data_requires_stream_and_flow(self) -> None:
-        state = derive_flow_assist_state(FlowAssistFacts())
+        state = derive_flow_assist_state(
+            FlowAssistFacts(has_stream=True, has_flow=False)
+        )
 
         self.assertEqual(state.stage, FlowAssistStage.DATA)
         self.assertEqual(state.summary, "需要加载河道 ASC 和流向 ASC")
         self.assertFalse(state.enabled[CommandId.GENERATE_FLOW_PREVIEW])
+
+    def test_review_summary_exactly_reports_changes_and_dem_conflicts(self) -> None:
+        state = derive_flow_assist_state(
+            FlowAssistFacts(
+                has_stream=True,
+                has_flow=True,
+                locked_count=9,
+                preview_exists=True,
+                preview_changes=4,
+                dem_conflicts=2,
+            )
+        )
+
+        self.assertEqual(state.summary, "预览待修改 4，逆坡冲突 2")
 
     def test_selected_cell_is_primary_object_action_when_data_is_ready(self) -> None:
         state = derive_flow_assist_state(
@@ -354,6 +425,35 @@ class FlowAssistUiModelTests(unittest.TestCase):
             without_cache_state.enabled[CommandId.EVALUATE_DEM_PREVIEW]
         )
 
+    def test_flow_status_uses_supplied_view_state_summary(self) -> None:
+        app = FlowStatusHarness()
+        view_state = derive_flow_assist_state(
+            FlowAssistFacts(
+                has_stream=True,
+                has_flow=True,
+                locked_count=3,
+                preview_exists=True,
+                preview_changes=2,
+                dem_conflicts=1,
+            )
+        )
+
+        app.update_mode_status(view_state)
+        app._update_flow_assist_text(view_state)
+
+        self.assertEqual(
+            app.flow_status_var.get(),
+            "流向辅助：预览待修改 2，逆坡冲突 1",
+        )
+        self.assertTrue(
+            app.flow_assist_var.get().startswith("预览待修改 2，逆坡冲突 1\n")
+        )
+        self.assertEqual(
+            app.flow_assist_var.get().splitlines()[1],
+            "已锁定河道 2 组 / 3 像元  出口 (2, 2)  汇流模式 范围SHP  最大距 12  "
+            "周边预览 需修改 2 / 已一致 1  DEM 逆坡 1",
+        )
+
 
     def test_refresh_flow_controls_consumes_model_enablement_once(self) -> None:
         app = FlowControlRefreshHarness()
@@ -361,6 +461,8 @@ class FlowAssistUiModelTests(unittest.TestCase):
         app._refresh_flow_controls()
 
         self.assertEqual(app.view_state_calls, 1)
+        self.assertIsNotNone(app.status_view_state)
+        self.assertIs(app.status_view_state.enabled, app.enabled)
         self.assertEqual(app.btn_add_locked_cell.configure_calls[-1]["state"], "normal")
         self.assertEqual(app.btn_remove_locked_region.configure_calls[-1]["state"], "normal")
         self.assertEqual(app.btn_reverse_segment.configure_calls[-1]["state"], "normal")
