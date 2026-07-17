@@ -44,6 +44,7 @@ from .water_render import build_base_image, overlay_flow_arrows, overlay_grid, o
 from .water_shortcuts import DEFAULT_SHORTCUTS, load_shortcuts, normalize_shortcut, save_shortcuts, shortcut_label
 from .water_state import FlowStateMixin
 from .water_ui import FitTargetDialog, ShortcutSettingsDialog, ToolTip
+from .water_ui_model import FlowAssistViewState
 from .water_ui_state import UIStateMixin
 from .water_workspace import WorkspaceMixin
 
@@ -638,7 +639,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
     def _shortcut_label(self, tool: str) -> str:
         return shortcut_label(self.shortcuts, tool)
 
-    def _update_shortcut_hint(self) -> None:
+    def _update_shortcut_hint(self, view_state: Optional[FlowAssistViewState] = None) -> None:
         if hasattr(self, "vector_hint"):
             flow_note = "；流向模式禁用橡皮擦" if self.mode_var.get() == "flow" else ""
             self.vector_hint.configure(
@@ -647,7 +648,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
                     f"河道模式可用矢量批量修正，流向模式左键改方向{flow_note}"
                 )
             )
-        self.update_mode_status()
+        self.update_mode_status(view_state)
 
     def edit_shortcuts(self) -> None:
         dialog = ShortcutSettingsDialog(self, self.shortcuts)

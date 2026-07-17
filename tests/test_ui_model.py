@@ -235,6 +235,31 @@ class FlowControlRefreshHarness(UIStateMixin):
         self.status_view_state = view_state
 
 
+class ToolChangeRefreshHarness(FlowControlRefreshHarness):
+    def __init__(self) -> None:
+        super().__init__()
+        self.mode_var = FakeVar("flow")
+        self.tool_var = FakeVar("brush")
+        self.info_var = FakeVar()
+        for name in (
+            "direction_box",
+            "btn_apply_direction",
+            "btn_flow_suggest",
+            "btn_vector_batch",
+            "radio_eraser_tool",
+        ):
+            setattr(self, name, FakeButton())
+
+    def update_mode_status(self, view_state=None) -> None:
+        self.update_mode_status_calls += 1
+        if view_state is None:
+            view_state = self._flow_assist_view_state()
+        self.status_view_state = view_state
+
+    def _update_shortcut_hint(self, view_state=None) -> None:
+        self.update_mode_status(view_state)
+
+
 class FlowAssistUiModelTests(unittest.TestCase):
     def test_missing_data_requires_stream_and_flow(self) -> None:
         state = derive_flow_assist_state(
@@ -555,6 +580,14 @@ class FlowAssistUiModelTests(unittest.TestCase):
         app._refresh_flow_controls(app.view_state)
 
         self.assertEqual(app.view_state_calls, 0)
+        self.assertIs(app.status_view_state, app.view_state)
+
+    def test_tool_change_derives_flow_assist_state_once(self) -> None:
+        app = ToolChangeRefreshHarness()
+
+        app.on_tool_changed()
+
+        self.assertEqual(app.view_state_calls, 1)
         self.assertIs(app.status_view_state, app.view_state)
 
 

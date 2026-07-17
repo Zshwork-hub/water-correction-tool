@@ -187,7 +187,6 @@ class ProjectWorkflowMixin:
         if self.autosave_var.get():
             self.save_autosave()
         self.info_var.set(f"已打开项目 {path.name}")
-        self.update_mode_status()
 
     def _clear_loaded_session(self) -> None:
         self.stream_raster = None

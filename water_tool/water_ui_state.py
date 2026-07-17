@@ -106,10 +106,10 @@ class UIStateMixin:
         self.btn_flow_suggest.configure(state="disabled" if is_stream else "normal")
         self.btn_vector_batch.configure(state="normal" if is_stream else "disabled")
         self.radio_eraser_tool.configure(state="normal" if is_stream else "disabled")
-        self._refresh_flow_controls()
-        self._update_shortcut_hint()
+        view_state = self._refresh_flow_controls()
+        self._update_shortcut_hint(view_state)
 
-    def _refresh_flow_controls(self, view_state: Optional[FlowAssistViewState] = None) -> None:
+    def _refresh_flow_controls(self, view_state: Optional[FlowAssistViewState] = None) -> FlowAssistViewState:
         if view_state is None:
             view_state = self._flow_assist_view_state()
         enabled = view_state.enabled
@@ -140,6 +140,7 @@ class UIStateMixin:
         self.update_mode_status(view_state)
         if hasattr(self, "_refresh_dem_controls"):
             self._refresh_dem_controls()
+        return view_state
 
     def on_river_flow_mode_changed(self, _event: Optional[tk.Event] = None) -> None:
         if self.flow_preview_state.kind == "river_skeleton":
