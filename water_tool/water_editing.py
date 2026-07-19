@@ -111,8 +111,6 @@ class RasterEditingMixin:
         self._flow_preview_last_cell = (end_row, end_col)
 
     def paint_flow_cell(self, row: int, col: int, direction: Optional[int] = None) -> None:
-        if not self._guard_raster_write("流向写入"):
-            return
         raster = self.get_active_raster()
         if raster is None or self.current_batch is None or self.mode_var.get() != "flow":
             return
@@ -125,8 +123,6 @@ class RasterEditingMixin:
         self.mark_dirty_cell(row, col)
 
     def paint_single_cell(self, row: int, col: int) -> None:
-        if not self._guard_raster_write("画笔/橡皮擦"):
-            return
         raster = self.get_active_raster()
         if raster is None or self.current_batch is None:
             return

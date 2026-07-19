@@ -18,8 +18,11 @@ def resolve_display_mode(
     edit_mode: str,
     has_stream: bool,
     has_flow: bool,
+    grids_match: bool = True,
 ) -> str:
     requested = str(payload.get("display_mode", payload.get("mode", edit_mode)))
+    if not grids_match and requested != edit_mode:
+        requested = edit_mode
     loaded = {"stream": has_stream, "flow": has_flow}
     if requested in loaded and loaded[requested]:
         return requested
@@ -177,6 +180,7 @@ class ProjectWorkflowMixin:
             self.mode_var.get(),
             self.stream_raster is not None,
             self.flow_raster is not None,
+            grids_match=self._rasters_share_grid(),
         )
         self.display_mode_var.set(display_mode)
         self._sync_display_mode_label()
@@ -344,6 +348,7 @@ class ProjectWorkflowMixin:
                 self.mode_var.get(),
                 self.stream_raster is not None,
                 self.flow_raster is not None,
+                grids_match=self._rasters_share_grid(),
             )
             self.display_mode_var.set(display_mode)
             self._sync_display_mode_label()

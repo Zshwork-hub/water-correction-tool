@@ -640,16 +640,14 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             if self.stream_raster is None:
                 messagebox.showwarning("提示", "当前没有加载河道文件。")
                 return
-            self.display_mode_var.set("stream")
-            self._sync_display_mode_label()
-            self.update_mode_status()
+            if not self._try_set_display_mode("stream", render=False):
+                return
         elif target == "flow":
             if self.flow_raster is None:
                 messagebox.showwarning("提示", "当前没有加载流向文件。")
                 return
-            self.display_mode_var.set("flow")
-            self._sync_display_mode_label()
-            self.update_mode_status()
+            if not self._try_set_display_mode("flow", render=False):
+                return
         elif target == "vector":
             if self.vector_layer is None:
                 messagebox.showwarning("提示", "当前没有加载河流SHP。")
@@ -881,11 +879,13 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             raster = self.get_display_raster()
             if raster is not None:
                 value = raster.value_at(row, col)
-                if self.mode_var.get() == "flow" and value in DIR_ORDER:
+                if self.display_mode() == "flow" and value in DIR_ORDER:
                     self.direction_var.set(f"{value} {direction_text(value)}")
                 self.coord_var.set(f"已选中像元: ({row}, {col})")
-                if self.mode_var.get() == "flow":
+                if self.mode_var.get() == "flow" and self.can_modify_active_raster():
                     self.info_var.set(f"右键已选中像元 ({row}, {col})，可在方向下拉框中手动应用方向")
+                elif self.mode_var.get() == "flow":
+                    self.info_var.set(f"右键已选中像元 ({row}, {col})；当前为只读选择状态，不会写入流向")
                 else:
                     self.info_var.set(f"右键已选中像元 ({row}, {col})，可点击“锁定选区河道”锁定目标河道")
         else:
@@ -998,7 +998,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             row, col, wx, wy = hit
             value = raster.value_at(row, col)
             text = f"行列: ({row}, {col})  坐标: ({wx:.6f}, {wy:.6f})  值: {fmt_value(value)}"
-            if self.mode_var.get() == "flow":
+            if self.display_mode() == "flow":
                 text += f"  方向: {direction_text(value)}"
             self.coord_var.set(text)
             if text != self._last_motion_text:

@@ -90,27 +90,34 @@ class UIStateMixin:
             label = "河道" if self.display_mode_var.get() == "stream" else "流向"
             self.display_mode_label_var.set(label)
 
-    def on_display_mode_changed(self) -> None:
-        label = self.display_mode_label_var.get()
-        requested = {"河道": "stream", "流向": "flow"}.get(label)
-        if requested is None:
-            self._sync_display_mode_label()
-            return
+    def _try_set_display_mode(self, requested: str, *, render: bool = True) -> bool:
+        label = "河道" if requested == "stream" else "流向"
         raster = self.stream_raster if requested == "stream" else self.flow_raster
         if raster is None:
             self.info_var.set(f"无法显示{label}图层，请先加载对应 ASC。")
             self._sync_display_mode_label()
-            return
+            return False
         if requested != self.mode_var.get() and not self._rasters_share_grid():
             self.info_var.set("河道与流向 ASC 网格不一致，无法在当前编辑目标下切换显示图层。")
             self._sync_display_mode_label()
-            return
+            return False
         self.display_mode_var.set(requested)
         self._maybe_setup_transformer()
         self._invalidate_viewport_cache()
         self._sync_display_mode_label()
         self.update_mode_status()
-        self.render(full=True)
+        if render:
+            self.render(full=True)
+        return True
+
+    def on_display_mode_changed(self) -> None:
+        requested = {"河道": "stream", "流向": "flow"}.get(
+            self.display_mode_label_var.get()
+        )
+        if requested is None:
+            self._sync_display_mode_label()
+            return
+        self._try_set_display_mode(requested)
 
     def update_display_mode_after_load(self) -> None:
         if self.get_display_raster() is None:
@@ -161,6 +168,8 @@ class UIStateMixin:
         if not is_stream and self.tool_var.get() == "eraser":
             self.tool_var.set("brush")
             self.info_var.set("订正流向模式禁用橡皮擦，已切换到画笔。")
+        if hasattr(self, "radio_brush_tool"):
+            self.radio_brush_tool.configure(state="normal" if can_write else "disabled")
         self.direction_box.configure(state="disabled" if is_stream else "readonly")
         self.btn_apply_direction.configure(state="normal" if not is_stream and can_write else "disabled")
         self.btn_vector_batch.configure(state="normal" if is_stream and can_write else "disabled")

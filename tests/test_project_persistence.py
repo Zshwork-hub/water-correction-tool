@@ -61,6 +61,18 @@ class DisplayModePersistenceTests(unittest.TestCase):
             "stream",
         )
 
+    def test_mismatched_grids_fall_back_to_the_loaded_edit_raster(self) -> None:
+        self.assertEqual(
+            resolve_display_mode(
+                {"mode": "flow", "display_mode": "stream"},
+                "flow",
+                True,
+                True,
+                grids_match=False,
+            ),
+            "flow",
+        )
+
     def test_invalid_display_mode_falls_back_to_loaded_edit_raster(self) -> None:
         self.assertEqual(
             resolve_display_mode({"mode": "stream", "display_mode": "invalid"}, "stream", True, True),

@@ -209,6 +209,15 @@ class RasterModeRegressionTests(unittest.TestCase):
             app.canvas_to_rc(1.2, 1.2),
             (1, 1, "stream:1", "stream:1"),
         )
+
+    def test_displayed_values_are_interpreted_by_display_mode(self) -> None:
+        import inspect
+
+        motion_source = inspect.getsource(WaterCorrectionApp.on_motion)
+        selection_source = inspect.getsource(WaterCorrectionApp.on_secondary_release)
+        self.assertIn('self.display_mode() == "flow"', motion_source)
+        self.assertIn('self.display_mode() == "flow"', selection_source)
+
     def test_matching_edit_and_display_modes_allow_writes(self) -> None:
         app = RasterModeHarness("flow", "flow")
 
@@ -453,6 +462,7 @@ class ToolChangeRefreshHarness(FlowControlRefreshHarness):
             "direction_box",
             "btn_apply_direction",
             "btn_vector_batch",
+            "radio_brush_tool",
             "radio_eraser_tool",
         ):
             setattr(self, name, FakeButton())
@@ -513,6 +523,7 @@ class ModeChangeRefreshHarness(FlowStatusMixin, UIStateMixin, FlowStateMixin):
             "direction_box",
             "btn_apply_direction",
             "btn_vector_batch",
+            "radio_brush_tool",
             "radio_eraser_tool",
             "btn_flow_preview",
             "btn_flow_apply",
@@ -1005,8 +1016,10 @@ class FlowAssistUiModelTests(unittest.TestCase):
 
         self.assertEqual(app.btn_apply_direction.configure_calls[-1]["state"], "disabled")
         self.assertEqual(app.btn_vector_batch.configure_calls[-1]["state"], "disabled")
+        self.assertEqual(app.radio_brush_tool.configure_calls[-1]["state"], "disabled")
         self.assertEqual(app.btn_flow_apply.configure_calls[-1]["state"], "disabled")
         self.assertEqual(app.btn_clear_flow_preview.configure_calls[-1]["state"], "normal")
+
     def test_tool_change_derives_flow_assist_state_once(self) -> None:
         app = ToolChangeRefreshHarness()
 
