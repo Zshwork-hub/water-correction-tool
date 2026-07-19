@@ -691,6 +691,8 @@ class FlowWorkflowMixin:
         self.render(full=True)
 
     def apply_flow_preview(self) -> None:
+        if not self._guard_raster_write("应用流向预览"):
+            return
         raster = self.flow_raster
         if raster is None:
             messagebox.showwarning("提示", "请先加载流向ASC。")
@@ -727,6 +729,8 @@ class FlowWorkflowMixin:
         self.info_var.set(applied_message)
 
     def _apply_flow_ops(self, ops: List[Tuple[int, int, int]], tool: str, note: str) -> ChangeBatch:
+        if not self._guard_raster_write("应用流向预览"):
+            return ChangeBatch(mode="flow", tool=tool, note=note)
         batch = ChangeBatch(mode="flow", tool=tool, note=note)
         raster = self.flow_raster
         if raster is None:

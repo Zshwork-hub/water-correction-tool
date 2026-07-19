@@ -153,13 +153,18 @@ class UIStateMixin:
 
     def on_tool_changed(self) -> FlowAssistViewState:
         is_stream = self.mode_var.get() == "stream"
+        can_write = (
+            self.can_modify_active_raster()
+            if hasattr(self, "can_modify_active_raster")
+            else True
+        )
         if not is_stream and self.tool_var.get() == "eraser":
             self.tool_var.set("brush")
             self.info_var.set("订正流向模式禁用橡皮擦，已切换到画笔。")
         self.direction_box.configure(state="disabled" if is_stream else "readonly")
-        self.btn_apply_direction.configure(state="disabled" if is_stream else "normal")
-        self.btn_vector_batch.configure(state="normal" if is_stream else "disabled")
-        self.radio_eraser_tool.configure(state="normal" if is_stream else "disabled")
+        self.btn_apply_direction.configure(state="normal" if not is_stream and can_write else "disabled")
+        self.btn_vector_batch.configure(state="normal" if is_stream and can_write else "disabled")
+        self.radio_eraser_tool.configure(state="normal" if is_stream and can_write else "disabled")
         view_state = self._refresh_flow_controls()
         self._update_shortcut_hint(view_state)
         return view_state
@@ -168,15 +173,20 @@ class UIStateMixin:
         if view_state is None:
             view_state = self._flow_assist_view_state()
         enabled = view_state.enabled
+        can_write = self.can_modify_active_raster() if hasattr(self, "can_modify_active_raster") else True
         has_flow_data = self.stream_raster is not None and self.flow_raster is not None
         locked_ready = bool(self.confirmed_flow_segments)
-        apply_ready = enabled[CommandId.APPLY_FLOW_PREVIEW]
+        apply_ready = enabled[CommandId.APPLY_FLOW_PREVIEW] and can_write
         preview_ready = enabled[CommandId.CLEAR_FLOW_PREVIEW]
         apply_text = self._flow_apply_button_text()
 
         def state(enabled: bool) -> str:
             return "normal" if enabled else "disabled"
 
+        if hasattr(self, "btn_undo"):
+            self.btn_undo.configure(state=state(can_write))
+        if hasattr(self, "btn_redo"):
+            self.btn_redo.configure(state=state(can_write))
         self.btn_flow_preview.configure(state=state(locked_ready))
         self.btn_flow_apply.configure(state=state(apply_ready), text=apply_text)
         self.btn_pick_flow_segment.configure(state=state(has_flow_data))
@@ -185,12 +195,12 @@ class UIStateMixin:
         self.btn_set_downstream.configure(state=state(locked_ready))
         self.btn_add_locked_cell.configure(state=state(enabled[CommandId.ADD_SELECTED_CELL]))
         self.btn_remove_locked_region.configure(state=state(enabled[CommandId.REMOVE_SELECTED_RIVERS]))
-        self.btn_reverse_segment.configure(state=state(enabled[CommandId.APPLY_FLOW_PREVIEW]), text=apply_text)
+        self.btn_reverse_segment.configure(state=state(apply_ready), text=apply_text)
         self.btn_preview_segment.configure(state=state(enabled[CommandId.CLEAR_FLOW_PREVIEW]))
         self.btn_confirm_segment.configure(state=state(enabled[CommandId.RESET_FLOW_ASSIST]))
         self.btn_preview_confluence.configure(state=state(locked_ready))
         self.btn_clear_flow_marks.configure(state=state(enabled[CommandId.RESET_FLOW_ASSIST]))
-        self.btn_apply_flow_preview.configure(state=state(enabled[CommandId.APPLY_FLOW_PREVIEW]), text=apply_text)
+        self.btn_apply_flow_preview.configure(state=state(apply_ready), text=apply_text)
         self.btn_clear_flow_preview.configure(state=state(enabled[CommandId.CLEAR_FLOW_PREVIEW]))
         self.update_mode_status(view_state)
         if hasattr(self, "_refresh_dem_controls"):

@@ -123,6 +123,11 @@ class SelectedDirectionHarness(RasterEditingMixin):
 
     def get_active_raster(self):
         return self.flow_raster
+    def _guard_raster_write(self, _action: str) -> bool:
+        if self.mode_var.get() == self.display_mode_var.get():
+            return True
+        self.info_var.set("只读选择状态：请先切换显示图层后再写入。")
+        return False
 
     def log_batch(self, batch) -> None:
         self.logged.append(batch)
@@ -210,6 +215,16 @@ class RasterModeRegressionTests(unittest.TestCase):
         self.assertTrue(app.can_modify_active_raster())
 
 class SelectionRegressionTests(unittest.TestCase):
+    def test_selected_direction_is_blocked_when_display_layer_differs(self) -> None:
+        app = SelectedDirectionHarness()
+        app.display_mode_var.set("stream")
+        before = app.flow_raster.data.copy()
+
+        app.apply_selected_direction()
+
+        np.testing.assert_array_equal(app.flow_raster.data, before)
+        self.assertIn("只读选择状态", app.info_var.get())
+
     def test_selected_direction_accepts_row_col_pair(self) -> None:
         app = SelectedDirectionHarness()
 
@@ -442,6 +457,8 @@ class ToolChangeRefreshHarness(FlowControlRefreshHarness):
         ):
             setattr(self, name, FakeButton())
 
+    def can_modify_active_raster(self) -> bool:
+        return self.mode_var.get() == self.display_mode_var.get()
     def update_mode_status(self, view_state=None) -> None:
         self.update_mode_status_calls += 1
         if view_state is None:
@@ -577,7 +594,8 @@ class ModeChangeRefreshHarness(FlowStatusMixin, UIStateMixin, FlowStateMixin):
 
 class ApplyPreviewModeSwitchHarness(FlowWorkflowMixin):
     def __init__(self) -> None:
-        self.mode_var = FakeVar("stream")
+        self.mode_var = FakeVar("flow")
+        self.display_mode_var = FakeVar("flow")
         self.flow_raster = object()
         self.flow_preview_state = FlowPreviewState.create(
             [(1, 1, 2)],
@@ -592,6 +610,8 @@ class ApplyPreviewModeSwitchHarness(FlowWorkflowMixin):
         self.view_state_calls = 0
         self.text_view_state = None
 
+    def _guard_raster_write(self, _action: str) -> bool:
+        return self.mode_var.get() == self.display_mode_var.get()
     def _apply_flow_ops(self, ops, tool, note):
         return type("FakeBatch", (), {"ops": list(ops)})()
 
@@ -976,6 +996,17 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertEqual(app.view_state_calls, 0)
         self.assertIs(app.status_view_state, app.view_state)
 
+    def test_tool_change_disables_write_controls_in_read_only_layer_mismatch(self) -> None:
+        app = ToolChangeRefreshHarness()
+        app.display_mode_var.set("stream")
+        app.enabled[CommandId.CLEAR_FLOW_PREVIEW] = True
+
+        app.on_tool_changed()
+
+        self.assertEqual(app.btn_apply_direction.configure_calls[-1]["state"], "disabled")
+        self.assertEqual(app.btn_vector_batch.configure_calls[-1]["state"], "disabled")
+        self.assertEqual(app.btn_flow_apply.configure_calls[-1]["state"], "disabled")
+        self.assertEqual(app.btn_clear_flow_preview.configure_calls[-1]["state"], "normal")
     def test_tool_change_derives_flow_assist_state_once(self) -> None:
         app = ToolChangeRefreshHarness()
 

@@ -51,6 +51,9 @@ class DummyVar:
     def __init__(self) -> None:
         self.value = ""
 
+    def get(self):
+        return self.value
+
     def set(self, value: str) -> None:
         self.value = value
 
@@ -60,6 +63,10 @@ class HistoryHarness(FlowStateMixin, EditingHistoryMixin):
         self._init_flow_state()
         header = tiny_header()
         self.flow_raster = RasterData(Path("flow.asc"), header, np.array([[1, 2], [4, 8]], dtype=np.int32))
+        self.mode_var = DummyVar()
+        self.mode_var.set("flow")
+        self.display_mode_var = DummyVar()
+        self.display_mode_var.set("flow")
         snapshot = RasterData(Path("flow.asc"), header, np.array([[1, 2], [4, 16]], dtype=np.int32))
         self.snapshots = {"flow": [("snap1", snapshot)]}
         self.histories = {"flow": []}
@@ -71,6 +78,8 @@ class HistoryHarness(FlowStateMixin, EditingHistoryMixin):
 
     def active_mode(self) -> str:
         return "flow"
+    def _guard_raster_write(self, _action: str) -> bool:
+        return self.mode_var.get() == self.display_mode_var.get()
 
     def get_active_raster(self):
         return self.flow_raster
@@ -167,6 +176,14 @@ class HistoryAndStateTests(unittest.TestCase):
         self.assertEqual(app.flow_preview_state.apply_note, "locked river skeleton flow")
         self.assertEqual(app.flow_preview_state.segment_key, ((0, 0), (1, 1)))
 
+    def test_undo_is_blocked_when_display_layer_differs(self) -> None:
+        app = HistoryHarness()
+        app.display_mode_var.set("stream")
+        before = app.flow_raster.data.copy()
+
+        app.undo()
+
+        np.testing.assert_array_equal(app.flow_raster.data, before)
     def test_snapshot_restore_is_undoable_and_redoable(self) -> None:
         app = HistoryHarness()
 

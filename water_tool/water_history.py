@@ -29,6 +29,8 @@ class EditingHistoryMixin:
             self.snapshot_list.insert(tk.END, f"{i + 1}. {name}")
 
     def restore_selected_snapshot(self) -> None:
+        if not self._guard_raster_write("恢复历史快照"):
+            return
         selection = self.snapshot_list.curselection()
         if not selection:
             return
@@ -68,6 +70,8 @@ class EditingHistoryMixin:
             self.info_var.set(f"已恢复快照 {name}，当前数据与快照一致")
 
     def undo(self) -> None:
+        if not self._guard_raster_write("撤销"):
+            return
         history = self.histories[self.active_mode()]
         if not history:
             return
@@ -86,6 +90,8 @@ class EditingHistoryMixin:
         self.info_var.set(f"已撤销 {len(batch.ops)} 个像元修改")
 
     def redo(self) -> None:
+        if not self._guard_raster_write("重做"):
+            return
         redo_stack = self.redo_stacks[self.active_mode()]
         if not redo_stack:
             return

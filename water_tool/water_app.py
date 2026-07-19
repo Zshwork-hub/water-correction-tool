@@ -570,6 +570,17 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             return not non_nodata.issubset({STREAM_VALUE})
         return True
 
+    def _guard_raster_write(self, action: str) -> bool:
+        if self.can_modify_active_raster():
+            return True
+        display_text = self.display_mode_name()
+        edit_text = "河道" if self.mode_var.get() == "stream" else "流向"
+        self.info_var.set(
+            f"只读选择状态：当前显示{display_text}，编辑目标为{edit_text}；"
+            f"已阻止{action}，切换显示图层后才能写入。"
+        )
+        self.update_mode_status()
+        return False
     def get_edit_raster(self) -> Optional[RasterData]:
         return self.stream_raster if self.mode_var.get() == "stream" else self.flow_raster
 
@@ -999,6 +1010,8 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             self.info_var.set("指针在栅格范围外")
 
     def on_button_press(self, event: tk.Event) -> None:
+        if not self._guard_raster_write("鼠标编辑"):
+            return
         hit = self.canvas_to_rc(event.x, event.y)
         if not hit:
             return
@@ -1018,6 +1031,8 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             self.selected_flow_cell = (row, col)
 
     def on_button_drag(self, event: tk.Event) -> None:
+        if not self._guard_raster_write("鼠标编辑"):
+            return
         if not self._pending_edit or self._press_hit is None or self._press_xy is None:
             return
         hit = self.canvas_to_rc(event.x, event.y)

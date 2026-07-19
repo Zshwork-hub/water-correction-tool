@@ -33,6 +33,8 @@ class RasterEditingMixin:
         return size // 2
 
     def apply_selected_direction(self) -> None:
+        if not self._guard_raster_write("写入所选方向"):
+            return
         if self.mode_var.get() != "flow":
             messagebox.showinfo("提示", "这个功能仅用于订正流向模式。")
             return
@@ -70,6 +72,8 @@ class RasterEditingMixin:
         self.info_var.set(f"已修改流向为 {direction_text(new_value)}")
 
     def paint_stroke_to(self, row: int, col: int) -> None:
+        if not self._guard_raster_write("画笔/橡皮擦"):
+            return
         if self.current_batch is None:
             return
         if self.last_painted is None:
@@ -89,6 +93,8 @@ class RasterEditingMixin:
         self.last_painted = (row, col)
 
     def paint_direction_line_to(self, start_row: int, start_col: int, end_row: int, end_col: int) -> None:
+        if not self._guard_raster_write("沿线方向刷写"):
+            return
         if self.current_batch is None or self.mode_var.get() != "flow":
             return
         if self._flow_preview_last_cell is None:
@@ -105,6 +111,8 @@ class RasterEditingMixin:
         self._flow_preview_last_cell = (end_row, end_col)
 
     def paint_flow_cell(self, row: int, col: int, direction: Optional[int] = None) -> None:
+        if not self._guard_raster_write("流向写入"):
+            return
         raster = self.get_active_raster()
         if raster is None or self.current_batch is None or self.mode_var.get() != "flow":
             return
@@ -117,6 +125,8 @@ class RasterEditingMixin:
         self.mark_dirty_cell(row, col)
 
     def paint_single_cell(self, row: int, col: int) -> None:
+        if not self._guard_raster_write("画笔/橡皮擦"):
+            return
         raster = self.get_active_raster()
         if raster is None or self.current_batch is None:
             return
@@ -150,6 +160,8 @@ class RasterEditingMixin:
         self.schedule_refresh()
 
     def apply_vector_batch(self) -> None:
+        if not self._guard_raster_write("按河流线批量修正"):
+            return
         if self.mode_var.get() != "stream":
             messagebox.showinfo("提示", "矢量批量修正仅在订正河道模式中使用。")
             return
