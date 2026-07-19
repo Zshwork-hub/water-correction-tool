@@ -8,15 +8,24 @@ from .water_shell_model import NAV_ITEMS, NavigationId
 from .water_ui_theme import UI_COLORS
 
 
-def normalize_wheel_steps(delta: int = 0, button: int = 0) -> int:
-    if button == 4:
-        return -1
-    if button == 5:
-        return 1
-    if delta == 0:
+def _safe_event_int(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
         return 0
-    magnitude = max(1, abs(int(delta)) // 120)
-    return -magnitude if delta > 0 else magnitude
+
+
+def normalize_wheel_steps(delta: int = 0, button: int = 0) -> int:
+    button_value = _safe_event_int(button)
+    delta_value = _safe_event_int(delta)
+    if button_value == 4:
+        return -1
+    if button_value == 5:
+        return 1
+    if delta_value == 0:
+        return 0
+    magnitude = max(1, abs(delta_value) // 120)
+    return -magnitude if delta_value > 0 else magnitude
 
 
 class ScrollableTaskPanel(ttk.Frame):
@@ -133,8 +142,8 @@ class ScrollableTaskPanel(ttk.Frame):
         if not self._is_descendant(self.winfo_containing(event.x_root, event.y_root)):
             return None
         steps = normalize_wheel_steps(
-            delta=int(getattr(event, "delta", 0)),
-            button=int(getattr(event, "num", 0)),
+            delta=getattr(event, "delta", 0),
+            button=getattr(event, "num", 0),
         )
         if steps:
             self._canvas.yview_scroll(steps, "units")

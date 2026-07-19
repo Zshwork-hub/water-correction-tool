@@ -50,7 +50,7 @@ class RasterEditingMixin:
         if selection is None:
             messagebox.showinfo("提示", "请先右键选中像元，或把鼠标停在需要修改的像元上。")
             return
-        row, col, _, _ = selection
+        row, col = selection
         new_value = self.current_edit_value()
         old_value = raster.value_at(row, col)
         if old_value == new_value:

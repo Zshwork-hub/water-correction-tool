@@ -3,7 +3,13 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
+from pathlib import Path
+
+import numpy as np
+
 from water_tool.water_flow_status import FlowStatusMixin
+from water_tool.water_core import AscHeader, RasterData
+from water_tool.water_editing import RasterEditingMixin
 from water_tool.water_flow_workflow import FlowWorkflowMixin
 from water_tool.water_state import FlowPreviewState, FlowStateMixin
 from water_tool.water_ui_commands import CommandId
@@ -47,12 +53,143 @@ class FakeVar:
         self.value = value
 
 
+def tiny_header() -> AscHeader:
+    return AscHeader(
+        [
+            "ncols 3\n",
+            "nrows 3\n",
+            "xllcorner 0\n",
+            "yllcorner 0\n",
+            "cellsize 1\n",
+            "NODATA_value -9999\n",
+        ],
+        {
+            "ncols": 3,
+            "nrows": 3,
+            "xllcorner": 0,
+            "yllcorner": 0,
+            "cellsize": 1,
+            "nodata_value": -9999,
+        },
+    )
+
+
+class SelectedDirectionHarness(RasterEditingMixin):
+    def __init__(self) -> None:
+        self.mode_var = FakeVar("flow")
+        self.tool_var = FakeVar("brush")
+        self.direction_var = FakeVar("1 东")
+        self.flow_raster = RasterData(
+            Path("flow.asc"),
+            tiny_header(),
+            np.full((3, 3), 4, dtype=np.int32),
+        )
+        self.selected_flow_cell = (1, 2)
+        self.histories = {"flow": []}
+        self.redo_stacks = {"flow": []}
+        self.info_var = FakeVar()
+        self.dirty = []
+        self.snapshots = []
+        self.logged = []
+        self.refreshes = []
+
+    def get_active_raster(self):
+        return self.flow_raster
+
+    def log_batch(self, batch) -> None:
+        self.logged.append(batch)
+
+    def take_snapshot(self, silent: bool) -> None:
+        self.snapshots.append(silent)
+
+    def mark_dirty_cell(self, row: int, col: int) -> None:
+        self.dirty.append((row, col))
+
+    def schedule_view_refresh(self, *, full: bool) -> None:
+        self.refreshes.append(full)
+
+
+class AddSelectedStreamHarness(FlowWorkflowMixin):
+    def __init__(self) -> None:
+        self.stream_raster = RasterData(
+            Path("stream.asc"),
+            tiny_header(),
+            np.array(
+                [
+                    [-9999, 1, -9999],
+                    [-9999, -9999, -9999],
+                    [-9999, -9999, -9999],
+                ],
+                dtype=np.int32,
+            ),
+        )
+        self.flow_raster = self.stream_raster
+        self.selected_flow_cell = (0, 1)
+        self.selected_flow_region = None
+        self.confirmed_flow_segments = {}
+        self.confirmed_flow_segment_cells = {}
+        self.info_var = FakeVar()
+        self.render_calls = []
+
+    def _locked_flow_cells_set(self):
+        cells = []
+        for group in self.confirmed_flow_segment_cells.values():
+            cells.extend(group)
+        return set(cells)
+
+    def _locked_group_key(self, cells):
+        return (cells[0], cells[-1])
+
+    def _reset_flow_selection_state(self, **_kwargs):
+        pass
+
+    def _reset_flow_preview_state(self):
+        pass
+
+    def _refresh_flow_assist_ui(self):
+        pass
+
+    def render(self, *, full: bool):
+        self.render_calls.append(full)
+
+
 class FakeControlPreview:
     def has_apply_ops(self) -> bool:
         return False
 
     def has_preview(self) -> bool:
         return True
+
+
+class SelectionRegressionTests(unittest.TestCase):
+    def test_selected_direction_accepts_row_col_pair(self) -> None:
+        app = SelectedDirectionHarness()
+
+        app.apply_selected_direction()
+
+        self.assertEqual(int(app.flow_raster.data[1, 2]), 1)
+        self.assertEqual(app.dirty, [(1, 2)])
+        self.assertEqual(len(app.histories["flow"]), 1)
+
+
+class AddSelectedCellRegressionTests(unittest.TestCase):
+    def test_add_selected_stream_cell_accepts_valid_selected_pair(self) -> None:
+        app = AddSelectedStreamHarness()
+
+        app.add_selected_stream_cell_to_lock()
+
+        self.assertEqual(app._locked_flow_cells_set(), {(0, 1)})
+        self.assertIn("补充锁定", app.info_var.get())
+
+    def test_add_selected_stream_cell_rejects_out_of_bounds_pair(self) -> None:
+        app = AddSelectedStreamHarness()
+        app.selected_flow_cell = (99, 99)
+
+        with patch("water_tool.water_flow_workflow.messagebox.showinfo") as showinfo:
+            app.add_selected_stream_cell_to_lock()
+
+        showinfo.assert_called_once()
+        self.assertEqual(app._locked_flow_cells_set(), set())
 
 
 class FlowStatusHarness(FlowStatusMixin):

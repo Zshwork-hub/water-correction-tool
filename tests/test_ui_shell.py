@@ -225,6 +225,8 @@ class ShellModelTests(unittest.TestCase):
         self.assertEqual(normalize_wheel_steps(delta=-120, button=0), 1)
         self.assertEqual(normalize_wheel_steps(delta=0, button=4), -1)
         self.assertEqual(normalize_wheel_steps(delta=0, button=5), 1)
+        self.assertEqual(normalize_wheel_steps(delta=120, button="??"), -1)
+        self.assertEqual(normalize_wheel_steps(delta="??", button="??"), 0)
 
     def test_scrollable_panel_does_not_capture_global_mousewheel(self) -> None:
         import inspect

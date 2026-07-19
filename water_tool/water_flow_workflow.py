@@ -164,6 +164,9 @@ class FlowWorkflowMixin:
             messagebox.showinfo("提示", "请先右键单点选中一个要补充锁定的河道像元。")
             return
         row, col = cell
+        if not (0 <= row < self.stream_raster.nrows and 0 <= col < self.stream_raster.ncols):
+            messagebox.showinfo("提示", "当前选中的像元超出河道栅格范围。")
+            return
         if self.stream_raster.value_at(row, col) != STREAM_VALUE:
             messagebox.showinfo("提示", "当前选中的像元不是 Stream=1 河道像元。")
             return
