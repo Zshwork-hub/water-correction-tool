@@ -37,26 +37,26 @@ def apply_ui_theme(style) -> None:
     )
     style.configure(
         "NavSelected.TButton",
-        background=UI_COLORS["primary"],
-        foreground=UI_COLORS["panel"],
+        background="#DBEAFE",
+        foreground=UI_COLORS["primary_active"],
         padding=(12, 8),
         anchor="w",
     )
     style.map(
         "NavSelected.TButton",
-        background=[("active", UI_COLORS["primary_active"])],
-        foreground=[("disabled", UI_COLORS["border"]), ("!disabled", UI_COLORS["panel"])],
+        background=[("active", "#BFDBFE")],
+        foreground=[("disabled", UI_COLORS["border"]), ("!disabled", UI_COLORS["primary_active"])],
     )
     style.configure(
         "Primary.TButton",
-        background=UI_COLORS["primary"],
-        foreground=UI_COLORS["panel"],
+        background="#DBEAFE",
+        foreground=UI_COLORS["primary_active"],
         padding=(12, 6),
     )
     style.map(
         "Primary.TButton",
-        background=[("active", UI_COLORS["primary_active"])],
-        foreground=[("disabled", UI_COLORS["border"]), ("!disabled", UI_COLORS["panel"])],
+        background=[("active", "#BFDBFE")],
+        foreground=[("disabled", UI_COLORS["border"]), ("!disabled", UI_COLORS["primary_active"])],
     )
     style.configure(
         "Status.TLabel",

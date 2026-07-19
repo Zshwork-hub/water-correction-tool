@@ -185,7 +185,10 @@ class ShellModelTests(unittest.TestCase):
 
         source = inspect.getsource(build_flow_compatibility_page)
         self.assertIn("panel.footer", source)
-        self.assertNotIn("ttk.Notebook", source)
+        self.assertIn("ttk.Notebook", source)
+        self.assertIn("手动改向", source)
+        self.assertIn("河网辅助", source)
+        self.assertIn("DEM 审核", source)
 
     def test_project_data_items_have_stable_order_and_commands(self) -> None:
         expected = [
@@ -251,6 +254,15 @@ class ShellModelTests(unittest.TestCase):
         self.assertIn("mode_status_var", source)
         self.assertIn("ModeStatus.TLabel", source)
 
+    def test_navigation_uses_a_readable_selected_indicator(self) -> None:
+        import inspect
+
+        from water_tool.water_ui_components import NavigationRail
+
+        source = inspect.getsource(NavigationRail)
+        self.assertIn("indicators", source)
+        self.assertIn("UI_COLORS[\"primary\"]", source)
+        self.assertNotIn('foreground=UI_COLORS["panel"]', inspect.getsource(apply_ui_theme))
     def test_theme_registers_required_widget_styles(self) -> None:
         style = RecordingStyle()
 

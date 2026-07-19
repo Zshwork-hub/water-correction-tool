@@ -179,6 +179,7 @@ class ProjectWorkflowMixin:
             self.flow_raster is not None,
         )
         self.display_mode_var.set(display_mode)
+        self._sync_display_mode_label()
         self.tool_var.set(str(payload.get("tool", self.tool_var.get())))
         self.direction_var.set(str(payload.get("direction", self.direction_var.get())))
         self.brush_size_var.set(int(payload.get("brush_size", self.brush_size_var.get())))
@@ -345,6 +346,7 @@ class ProjectWorkflowMixin:
                 self.flow_raster is not None,
             )
             self.display_mode_var.set(display_mode)
+            self._sync_display_mode_label()
             self.tool_var.set(str(meta.get("tool", self.tool_var.get())))
             self.direction_var.set(str(meta.get("direction", self.direction_var.get())))
             self.brush_size_var.set(int(meta.get("brush_size", self.brush_size_var.get())))

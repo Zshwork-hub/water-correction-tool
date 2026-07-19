@@ -25,12 +25,21 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     title_var = tk.StringVar(master=parent, value="流向订正")
     panel = ScrollableTaskPanel(parent, title_var=title_var, summary_var=app.flow_status_var)
     panel.body.columnconfigure(0, weight=1)
-    row = 0
+    panel.body.rowconfigure(0, weight=1)
+    notebook = ttk.Notebook(panel.body)
+    notebook.grid(row=0, column=0, sticky="nsew")
+    manual_tab = ttk.Frame(notebook, style="Panel.TFrame", padding=8)
+    assist_tab = ttk.Frame(notebook, style="Panel.TFrame", padding=8)
+    dem_tab = ttk.Frame(notebook, style="Panel.TFrame", padding=8)
+    for tab in (manual_tab, assist_tab, dem_tab):
+        tab.columnconfigure(0, weight=1)
+    notebook.add(manual_tab, text="手动改向")
+    notebook.add(assist_tab, text="河网辅助")
+    notebook.add(dem_tab, text="DEM 审核")
 
-    manual = ttk.LabelFrame(panel.body, text="手动方向", padding=8)
-    manual.grid(row=row, column=0, sticky="ew", pady=(0, 8))
+    manual = ttk.LabelFrame(manual_tab, text="手动改向", padding=8)
+    manual.grid(row=0, column=0, sticky="ew")
     manual.columnconfigure(1, weight=1)
-    row += 1
     ttk.Label(manual, text="D8 方向").grid(row=0, column=0, sticky="w")
     direction_box = ttk.Combobox(
         manual,
@@ -45,7 +54,9 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     btn_apply_direction.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
     _command_tip(btn_apply_direction, CommandId.WRITE_FLOW_DIRECTION)
 
-    range_section = CollapsibleSection(panel.body, "汇流范围", expanded=False)
+    row = 0
+
+    range_section = CollapsibleSection(assist_tab, "汇流范围", expanded=False)
     range_section.grid(row=row, column=0, sticky="ew", pady=(0, 8))
     range_section.content.columnconfigure(2, weight=1)
     row += 1
@@ -75,7 +86,7 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     btn_lock_polygon_stream.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(6, 0))
     _command_tip(btn_lock_polygon_stream, CommandId.ADD_POLYGON_RIVERS)
 
-    lock_section = CollapsibleSection(panel.body, "订正对象", expanded=True)
+    lock_section = CollapsibleSection(assist_tab, "订正对象", expanded=True)
     lock_section.grid(row=row, column=0, sticky="ew", pady=(0, 8))
     row += 1
     for column in range(2):
@@ -105,7 +116,7 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     btn_remove_locked_region.grid(row=1, column=1, sticky="ew", pady=(6, 0))
     _command_tip(btn_remove_locked_region, CommandId.REMOVE_SELECTED_RIVERS)
 
-    river_section = CollapsibleSection(panel.body, "河道本体流向", expanded=True)
+    river_section = CollapsibleSection(assist_tab, "河道本体流向", expanded=True)
     river_section.grid(row=row, column=0, sticky="ew", pady=(0, 8))
     row += 1
     river_section.content.columnconfigure(1, weight=1)
@@ -134,7 +145,7 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     )
     btn_preview_river_flow.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
-    confluence_section = CollapsibleSection(panel.body, "周边汇流", expanded=True)
+    confluence_section = CollapsibleSection(assist_tab, "周边汇流", expanded=True)
     confluence_section.grid(row=row, column=0, sticky="ew", pady=(0, 8))
     row += 1
     confluence_section.content.columnconfigure(1, weight=1)
@@ -192,7 +203,7 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
         value="右键选择目标河道并加入订正对象；设出口后先预览河道本体，再预览周边汇流。",
     )
     ttk.Label(
-        panel.body,
+        assist_tab,
         textvariable=flow_assist_var,
         style="Muted.TLabel",
         justify="left",
@@ -200,8 +211,8 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     ).grid(row=row, column=0, sticky="ew", pady=(0, 8))
     row += 1
 
-    dem_section = CollapsibleSection(panel.body, "DEM 审核", expanded=False)
-    dem_section.grid(row=row, column=0, sticky="ew")
+    dem_section = CollapsibleSection(dem_tab, "DEM 工具与审核", expanded=True)
+    dem_section.grid(row=0, column=0, sticky="ew")
     for column in range(2):
         dem_section.content.columnconfigure(column, weight=1)
     btn_load_dem = ttk.Button(dem_section.content, text="加载 DEM", command=app.load_dem_dialog)

@@ -198,23 +198,35 @@ class NavigationRail(ttk.Frame):
         self.variable = variable
         self.command = command
         self.buttons: Dict[NavigationId, ttk.Button] = {}
+        self.indicators: Dict[NavigationId, tk.Frame] = {}
         self.columnconfigure(0, weight=1)
         for row, item in enumerate(NAV_ITEMS):
+            row_frame = tk.Frame(self, background=UI_COLORS["panel"])
+            row_frame.grid(row=row, column=0, sticky="ew", pady=(0, 4))
+            row_frame.columnconfigure(1, weight=1)
+            indicator = tk.Frame(row_frame, width=3, background=UI_COLORS["panel"])
+            indicator.grid(row=0, column=0, sticky="ns")
+            indicator.grid_propagate(False)
             button = ttk.Button(
-                self,
+                row_frame,
                 text=item.label,
                 style="Nav.TButton",
                 command=lambda value=item.navigation_id: self._select(value),
             )
-            button.grid(row=row, column=0, sticky="ew", pady=(0, 4))
+            button.grid(row=0, column=1, sticky="ew")
             self.buttons[item.navigation_id] = button
+            self.indicators[item.navigation_id] = indicator
         self.set_selected(NavigationId(self.variable.get()))
 
     def set_selected(self, navigation_id: NavigationId) -> None:
         navigation_id = NavigationId(navigation_id)
         self.variable.set(navigation_id.value)
         for item_id, button in self.buttons.items():
-            button.configure(style="NavSelected.TButton" if item_id == navigation_id else "Nav.TButton")
+            selected = item_id == navigation_id
+            button.configure(style="NavSelected.TButton" if selected else "Nav.TButton")
+            self.indicators[item_id].configure(
+                background=UI_COLORS["primary"] if selected else UI_COLORS["panel"]
+            )
 
     def _select(self, navigation_id: NavigationId) -> None:
         self.set_selected(navigation_id)
