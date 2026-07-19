@@ -44,10 +44,6 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     btn_apply_direction = ttk.Button(manual, text=write_command.label, command=app.apply_selected_direction)
     btn_apply_direction.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
     _command_tip(btn_apply_direction, CommandId.WRITE_FLOW_DIRECTION)
-    suggest_command = get_command(CommandId.SUGGEST_FLOW_DIRECTION)
-    btn_flow_suggest = ttk.Button(manual, text=suggest_command.label, command=app.suggest_flow_direction)
-    btn_flow_suggest.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-    _command_tip(btn_flow_suggest, CommandId.SUGGEST_FLOW_DIRECTION)
 
     range_section = CollapsibleSection(panel.body, "汇流范围", expanded=False)
     range_section.grid(row=row, column=0, sticky="ew", pady=(0, 8))
@@ -333,7 +329,6 @@ def build_flow_compatibility_page(app, parent) -> tuple[ScrollableTaskPanel, dic
     controls = {
         "direction_box": direction_box,
         "btn_apply_direction": btn_apply_direction,
-        "btn_flow_suggest": btn_flow_suggest,
         "chk_show_confluence_polygon": chk_show_confluence_polygon,
         "btn_lock_polygon_stream": btn_lock_polygon_stream,
         "btn_pick_flow_segment": btn_pick_flow_segment,

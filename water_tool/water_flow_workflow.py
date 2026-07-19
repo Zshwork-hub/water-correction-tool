@@ -25,29 +25,6 @@ from .water_state import FlowPreviewState
 
 
 class FlowWorkflowMixin:
-    def suggest_flow_direction(self) -> None:
-        if self.mode_var.get() != "flow":
-            messagebox.showinfo("提示", "这个功能仅用于订正流向模式。")
-            return
-        raster = self.get_active_raster()
-        if raster is None:
-            messagebox.showwarning("提示", "请先加载流向ASC。")
-            return
-        selection = self.selected_flow_cell
-        if selection is None:
-            selection = self.canvas_to_rc(self.winfo_pointerx() - self.canvas.winfo_rootx(), self.winfo_pointery() - self.canvas.winfo_rooty())
-        if selection is None:
-            messagebox.showinfo("提示", "请先右键选中像元，或把鼠标停在需要建议的像元上。")
-            return
-        row, col, _, _ = selection
-        suggestions = self._suggest_flow_candidates(raster, row, col)
-        if not suggestions:
-            messagebox.showinfo("提示", "当前像元附近没有可用的方向建议。")
-            return
-        text = "，".join(f"{code} {direction_text(code)}" for code in suggestions[:3])
-        self.info_var.set(f"方向建议: {text}")
-        if suggestions:
-            self.direction_var.set(f"{suggestions[0]} {direction_text(suggestions[0])}")
 
     def _require_selected_flow_cell(self) -> Optional[Tuple[int, int]]:
         if self.selected_flow_cell is None:
@@ -806,20 +783,4 @@ class FlowWorkflowMixin:
         self._refresh_flow_assist_ui()
         self.render(full=False)
 
-    def _suggest_flow_candidates(self, raster: RasterData, row: int, col: int) -> List[int]:
-        votes: Dict[int, int] = {}
-        current = raster.value_at(row, col)
-        if current in DIR_ORDER:
-            votes[current] = votes.get(current, 0) + 3
-        for code, (dr, dc) in DIR_OFFSETS.items():
-            nr = row + dr
-            nc = col + dc
-            if not (0 <= nr < raster.nrows and 0 <= nc < raster.ncols):
-                continue
-            neighbor = raster.value_at(nr, nc)
-            if neighbor in DIR_ORDER:
-                votes[OPPOSITE_DIR[code]] = votes.get(OPPOSITE_DIR[code], 0) + 2
-            elif neighbor == STREAM_VALUE:
-                votes[code] = votes.get(code, 0) + 1
-        ranked = sorted(votes.items(), key=lambda item: (-item[1], DIR_ORDER.index(item[0]) if item[0] in DIR_ORDER else 999))
-        return [code for code, _ in ranked]
+

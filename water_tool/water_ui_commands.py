@@ -22,7 +22,6 @@ class CommandId(str, Enum):
     FIT_CONTENT = "map.fit_content"
     CENTER_RIVER = "map.center_river"
     WRITE_FLOW_DIRECTION = "flow.manual.write_direction"
-    SUGGEST_FLOW_DIRECTION = "flow.manual.suggest_direction"
     APPLY_VECTOR_CORRECTION = "stream.apply_vector_correction"
     ADD_SELECTED_RIVERS = "flow.objects.add_selected_rivers"
     ADD_SELECTED_CELL = "flow.objects.add_selected_cell"
@@ -71,7 +70,6 @@ _COMMANDS: Dict[CommandId, CommandDefinition] = {
         _command(CommandId.FIT_CONTENT, "适配内容", "选择数据或图层并适配到地图窗口。"),
         _command(CommandId.CENTER_RIVER, "居中河流线", "保持当前缩放并将河流线移到地图中央。"),
         _command(CommandId.WRITE_FLOW_DIRECTION, "写入所选方向", "把所选 D8 方向写入当前选中像元。", True),
-        _command(CommandId.SUGGEST_FLOW_DIRECTION, "建议方向", "根据相邻流向给出人工参考建议，不修改数据。"),
         _command(CommandId.APPLY_VECTOR_CORRECTION, "按河流线修正", "按河流参考线批量修正河道栅格。", True),
         _command(CommandId.ADD_SELECTED_RIVERS, "加入所选河道", "将当前地图选区内的河道加入订正对象。"),
         _command(CommandId.ADD_SELECTED_CELL, "加入所选像元", "将当前选中的河道像元加入订正对象。"),

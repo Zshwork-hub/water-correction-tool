@@ -23,7 +23,6 @@ class UiCommandCatalogTests(unittest.TestCase):
             "FIT_CONTENT": "map.fit_content",
             "CENTER_RIVER": "map.center_river",
             "WRITE_FLOW_DIRECTION": "flow.manual.write_direction",
-            "SUGGEST_FLOW_DIRECTION": "flow.manual.suggest_direction",
             "APPLY_VECTOR_CORRECTION": "stream.apply_vector_correction",
             "ADD_SELECTED_RIVERS": "flow.objects.add_selected_rivers",
             "ADD_SELECTED_CELL": "flow.objects.add_selected_cell",
@@ -45,6 +44,9 @@ class UiCommandCatalogTests(unittest.TestCase):
 
         self.assertEqual(actual, expected)
         self.assertEqual(len(actual.values()), len(set(actual.values())))
+
+    def test_low_value_direction_suggestion_command_is_removed(self) -> None:
+        self.assertFalse(hasattr(CommandId, "SUGGEST_FLOW_DIRECTION"))
 
     def test_catalog_contains_every_command_id_once(self) -> None:
         expected_ids = set(CommandId)
@@ -108,7 +110,6 @@ class UiCommandCatalogTests(unittest.TestCase):
             CommandId.FIT_CONTENT: "适配内容",
             CommandId.CENTER_RIVER: "居中河流线",
             CommandId.WRITE_FLOW_DIRECTION: "写入所选方向",
-            CommandId.SUGGEST_FLOW_DIRECTION: "建议方向",
             CommandId.APPLY_VECTOR_CORRECTION: "按河流线修正",
             CommandId.ADD_SELECTED_RIVERS: "加入所选河道",
             CommandId.REMOVE_SELECTED_RIVERS: "移除所选河道",

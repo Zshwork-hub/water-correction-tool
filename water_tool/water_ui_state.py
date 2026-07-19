@@ -128,7 +128,6 @@ class UIStateMixin:
             self.info_var.set("订正流向模式禁用橡皮擦，已切换到画笔。")
         self.direction_box.configure(state="disabled" if is_stream else "readonly")
         self.btn_apply_direction.configure(state="disabled" if is_stream else "normal")
-        self.btn_flow_suggest.configure(state="disabled" if is_stream else "normal")
         self.btn_vector_batch.configure(state="normal" if is_stream else "disabled")
         self.radio_eraser_tool.configure(state="normal" if is_stream else "disabled")
         view_state = self._refresh_flow_controls()

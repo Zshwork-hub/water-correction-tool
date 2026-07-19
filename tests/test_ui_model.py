@@ -381,7 +381,6 @@ class ToolChangeRefreshHarness(FlowControlRefreshHarness):
         for name in (
             "direction_box",
             "btn_apply_direction",
-            "btn_flow_suggest",
             "btn_vector_batch",
             "radio_eraser_tool",
         ):
@@ -436,7 +435,6 @@ class ModeChangeRefreshHarness(FlowStatusMixin, UIStateMixin, FlowStateMixin):
         for name in (
             "direction_box",
             "btn_apply_direction",
-            "btn_flow_suggest",
             "btn_vector_batch",
             "radio_eraser_tool",
             "btn_flow_preview",

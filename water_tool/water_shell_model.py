@@ -59,7 +59,6 @@ STREAM_CONTROL_KEYS: Tuple[str, ...] = (
 FLOW_CONTROL_KEYS: Tuple[str, ...] = (
     "direction_box",
     "btn_apply_direction",
-    "btn_flow_suggest",
     "chk_show_confluence_polygon",
     "btn_lock_polygon_stream",
     "btn_pick_flow_segment",

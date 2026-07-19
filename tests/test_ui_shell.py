@@ -141,7 +141,7 @@ class ShellModelTests(unittest.TestCase):
 
     def test_compatibility_page_control_contracts_are_complete_and_disjoint(self) -> None:
         required_flow = {
-            "direction_box", "btn_apply_direction", "btn_flow_suggest",
+            "direction_box", "btn_apply_direction",
             "btn_pick_flow_segment", "btn_add_locked_cell", "btn_remove_locked_region",
             "btn_set_flow_outlet", "btn_preview_river_flow", "btn_set_downstream",
             "btn_reverse_segment", "btn_preview_segment", "btn_confirm_segment",
@@ -164,6 +164,13 @@ class ShellModelTests(unittest.TestCase):
         self.assertEqual(set(HISTORY_CONTROL_KEYS), required_history)
         all_keys = list(FLOW_CONTROL_KEYS + DISPLAY_CONTROL_KEYS + HISTORY_CONTROL_KEYS)
         self.assertEqual(len(all_keys), len(set(all_keys)))
+
+    def test_flow_page_does_not_expose_direction_suggestion(self) -> None:
+        import inspect
+
+        source = inspect.getsource(build_flow_compatibility_page)
+        self.assertNotIn("btn_flow_suggest", source)
+        self.assertNotIn("suggest_flow_direction", source)
 
     def test_compatibility_builders_use_scrollable_panels(self) -> None:
         import inspect
