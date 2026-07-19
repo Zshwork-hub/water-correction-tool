@@ -160,7 +160,6 @@ class FlowStateMixin:
         self.flow_assist_outlets = []
         self.flow_assist_nodes = []
         self.flow_preview_state = FlowPreviewState()
-        self.flow_suggestions = []
         self._flow_network_cache_key = None
         self._flow_network_cache = None
 

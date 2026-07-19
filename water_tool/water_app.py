@@ -76,6 +76,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.log_path = self.user_data_dir / "water_correction_log.csv"
 
         self.mode_var = tk.StringVar(value="stream")
+        self.display_mode_var = tk.StringVar(value="stream")
         self.navigation_var = tk.StringVar(value="stream")
         self._project_data_dialog = None
         self.tool_var = tk.StringVar(value="brush")
@@ -562,11 +563,23 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             return not non_nodata.issubset({STREAM_VALUE})
         return True
 
-    def get_active_raster(self) -> Optional[RasterData]:
+    def get_edit_raster(self) -> Optional[RasterData]:
         return self.stream_raster if self.mode_var.get() == "stream" else self.flow_raster
+
+    def get_display_raster(self) -> Optional[RasterData]:
+        return self.stream_raster if self.display_mode_var.get() == "stream" else self.flow_raster
+
+    def can_modify_active_raster(self) -> bool:
+        return self.mode_var.get() == self.display_mode_var.get() and self.get_edit_raster() is not None
+
+    def get_active_raster(self) -> Optional[RasterData]:
+        return self.get_edit_raster()
 
     def get_original_active_raster(self) -> Optional[RasterData]:
         return self.original_stream_raster if self.mode_var.get() == "stream" else self.original_flow_raster
+
+    def get_original_display_raster(self) -> Optional[RasterData]:
+        return self.original_stream_raster if self.display_mode_var.get() == "stream" else self.original_flow_raster
 
     def active_mode(self) -> str:
         return self.mode_var.get()

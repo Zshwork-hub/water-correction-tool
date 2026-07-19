@@ -7,6 +7,8 @@ from pathlib import Path
 import numpy as np
 
 from water_tool.water_core import AscHeader, RasterData, relative_or_absolute, resolve_relative_or_absolute
+from water_tool.water_project_workflow import resolve_display_mode
+
 from water_tool.water_project import (
     project_data_path,
     raster_payload,
@@ -44,6 +46,26 @@ def tiny_header(nrows: int = 2, ncols: int = 3) -> AscHeader:
 
 def make_raster(path: Path, data: np.ndarray, crs_text: str = "") -> RasterData:
     return RasterData(path, tiny_header(*data.shape), data.astype(np.int32), crs_text)
+
+
+class DisplayModePersistenceTests(unittest.TestCase):
+    def test_missing_display_mode_falls_back_to_edit_mode(self) -> None:
+        self.assertEqual(
+            resolve_display_mode({"mode": "flow"}, "stream", True, True),
+            "flow",
+        )
+
+    def test_display_mode_requires_the_requested_raster_to_be_loaded(self) -> None:
+        self.assertEqual(
+            resolve_display_mode({"mode": "flow", "display_mode": "flow"}, "flow", True, False),
+            "stream",
+        )
+
+    def test_invalid_display_mode_falls_back_to_loaded_edit_raster(self) -> None:
+        self.assertEqual(
+            resolve_display_mode({"mode": "stream", "display_mode": "invalid"}, "stream", True, True),
+            "stream",
+        )
 
 
 class ProjectPersistenceTests(unittest.TestCase):

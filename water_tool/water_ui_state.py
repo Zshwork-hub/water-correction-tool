@@ -110,10 +110,7 @@ class UIStateMixin:
                     if hasattr(self, "ui_shell"):
                         self.ui_shell.show_page(target_navigation)
         self.tool_var.set("brush")
-        if self.active_mode() != "flow":
-            self._reset_flow_selection_state()
-            self._reset_flow_preview_state()
-            self._reset_flow_marker_state()
+
         view_state = self.on_tool_changed()
         self._update_flow_assist_text(view_state)
         self._maybe_setup_transformer()

@@ -13,6 +13,25 @@ from .water_core import (
     parse_shapefile_polygon,
     resolve_relative_or_absolute,
 )
+def resolve_display_mode(
+    payload: Dict[str, object],
+    edit_mode: str,
+    has_stream: bool,
+    has_flow: bool,
+) -> str:
+    requested = str(payload.get("display_mode", payload.get("mode", edit_mode)))
+    loaded = {"stream": has_stream, "flow": has_flow}
+    if requested in loaded and loaded[requested]:
+        return requested
+    if edit_mode in loaded and loaded[edit_mode]:
+        return edit_mode
+    if has_stream:
+        return "stream"
+    if has_flow:
+        return "flow"
+    return edit_mode if edit_mode in loaded else "stream"
+
+
 from .water_project import (
     project_data_path,
     raster_payload,
@@ -52,6 +71,7 @@ class ProjectWorkflowMixin:
             "version": "2.0",
             "workspace_dir": str(self.workspace_dir),
             "mode": self.mode_var.get(),
+            "display_mode": self.display_mode_var.get(),
             "tool": self.tool_var.get(),
             "direction": self.direction_var.get(),
             "brush_size": int(self.brush_size_var.get()),
@@ -152,6 +172,13 @@ class ProjectWorkflowMixin:
         if mode in {"stream", "flow"}:
             self.mode_var.set(mode)
             self._show_edit_navigation(mode)
+        display_mode = resolve_display_mode(
+            payload,
+            self.mode_var.get(),
+            self.stream_raster is not None,
+            self.flow_raster is not None,
+        )
+        self.display_mode_var.set(display_mode)
         self.tool_var.set(str(payload.get("tool", self.tool_var.get())))
         self.direction_var.set(str(payload.get("direction", self.direction_var.get())))
         self.brush_size_var.set(int(payload.get("brush_size", self.brush_size_var.get())))
@@ -235,6 +262,7 @@ class ProjectWorkflowMixin:
             dem_params = self._dem_score_params()
             meta = {
                 "mode": self.mode_var.get(),
+            "display_mode": self.display_mode_var.get(),
                 "tool": self.tool_var.get(),
                 "direction": self.direction_var.get(),
                 "brush_size": int(self.brush_size_var.get()),
@@ -310,6 +338,13 @@ class ProjectWorkflowMixin:
             if restored_mode in {"stream", "flow"}:
                 self.mode_var.set(restored_mode)
                 self._show_edit_navigation(restored_mode)
+            display_mode = resolve_display_mode(
+                meta,
+                self.mode_var.get(),
+                self.stream_raster is not None,
+                self.flow_raster is not None,
+            )
+            self.display_mode_var.set(display_mode)
             self.tool_var.set(str(meta.get("tool", self.tool_var.get())))
             self.direction_var.set(str(meta.get("direction", self.direction_var.get())))
             self.brush_size_var.set(int(meta.get("brush_size", self.brush_size_var.get())))

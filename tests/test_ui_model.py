@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
+from water_tool.water_app import WaterCorrectionApp
 from water_tool.water_flow_status import FlowStatusMixin
 from water_tool.water_core import AscHeader, RasterData
 from water_tool.water_editing import RasterEditingMixin
@@ -72,6 +73,18 @@ def tiny_header() -> AscHeader:
             "nodata_value": -9999,
         },
     )
+
+
+class RasterModeHarness:
+    get_edit_raster = WaterCorrectionApp.get_edit_raster
+    get_display_raster = WaterCorrectionApp.get_display_raster
+    can_modify_active_raster = WaterCorrectionApp.can_modify_active_raster
+
+    def __init__(self, edit_mode: str, display_mode: str) -> None:
+        self.mode_var = FakeVar(edit_mode)
+        self.display_mode_var = FakeVar(display_mode)
+        self.stream_raster = object()
+        self.flow_raster = object()
 
 
 class SelectedDirectionHarness(RasterEditingMixin):
@@ -160,6 +173,19 @@ class FakeControlPreview:
     def has_preview(self) -> bool:
         return True
 
+
+class RasterModeRegressionTests(unittest.TestCase):
+    def test_edit_and_display_rasters_are_independent(self) -> None:
+        app = RasterModeHarness("flow", "stream")
+
+        self.assertIs(app.get_edit_raster(), app.flow_raster)
+        self.assertIs(app.get_display_raster(), app.stream_raster)
+        self.assertFalse(app.can_modify_active_raster())
+
+    def test_matching_edit_and_display_modes_allow_writes(self) -> None:
+        app = RasterModeHarness("flow", "flow")
+
+        self.assertTrue(app.can_modify_active_raster())
 
 class SelectionRegressionTests(unittest.TestCase):
     def test_selected_direction_accepts_row_col_pair(self) -> None:
@@ -897,7 +923,7 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertEqual(app.view_state_calls, 1)
         self.assertIs(app.status_view_state, app.view_state)
 
-    def test_mode_change_resets_flow_state_before_single_refresh(self) -> None:
+    def test_mode_change_preserves_flow_state_before_single_refresh(self) -> None:
         app = ModeChangeRefreshHarness()
         app.mode_var.set("stream")
 
@@ -906,15 +932,15 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertEqual(app.view_state_calls, 1)
         self.assertEqual(
             app.derived_snapshots,
-            [(None, False, (), (), ())],
+            [(app.selected_flow_cell, True, ((0, 0),), ((1, 2),), ((1, 1),))],
         )
         self.assertEqual(
             app.btn_apply_flow_preview.configure_calls[-1]["state"],
-            "disabled",
+            "normal",
         )
         self.assertEqual(
             app.btn_clear_flow_preview.configure_calls[-1]["state"],
-            "disabled",
+            "normal",
         )
         self.assertEqual(
             app.flow_status_var.get(),
