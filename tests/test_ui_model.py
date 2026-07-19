@@ -75,21 +75,36 @@ def tiny_header() -> AscHeader:
     )
 
 
+class CoordinateRaster:
+    def __init__(self, rows: int, cols: int, label: str) -> None:
+        self.nrows = rows
+        self.ncols = cols
+        self.label = label
+
+    def rc_to_world(self, row: int, col: int):
+        return f"{self.label}:{row}", f"{self.label}:{col}"
+
 class RasterModeHarness:
     get_edit_raster = WaterCorrectionApp.get_edit_raster
+    get_active_raster = WaterCorrectionApp.get_active_raster
     get_display_raster = WaterCorrectionApp.get_display_raster
     can_modify_active_raster = WaterCorrectionApp.can_modify_active_raster
+    canvas_to_rc = WaterCorrectionApp.canvas_to_rc
 
     def __init__(self, edit_mode: str, display_mode: str) -> None:
         self.mode_var = FakeVar(edit_mode)
         self.display_mode_var = FakeVar(display_mode)
-        self.stream_raster = object()
-        self.flow_raster = object()
+        self.stream_raster = CoordinateRaster(3, 3, "stream")
+        self.flow_raster = CoordinateRaster(1, 1, "flow")
+        self.zoom_var = FakeVar(1.0)
+        self._view_x = 0.0
+        self._view_y = 0.0
 
 
 class SelectedDirectionHarness(RasterEditingMixin):
     def __init__(self) -> None:
         self.mode_var = FakeVar("flow")
+        self.display_mode_var = FakeVar("flow")
         self.tool_var = FakeVar("brush")
         self.direction_var = FakeVar("1 东")
         self.flow_raster = RasterData(
@@ -182,6 +197,13 @@ class RasterModeRegressionTests(unittest.TestCase):
         self.assertIs(app.get_display_raster(), app.stream_raster)
         self.assertFalse(app.can_modify_active_raster())
 
+    def test_canvas_coordinates_use_the_display_raster(self) -> None:
+        app = RasterModeHarness("flow", "stream")
+
+        self.assertEqual(
+            app.canvas_to_rc(1.2, 1.2),
+            (1, 1, "stream:1", "stream:1"),
+        )
     def test_matching_edit_and_display_modes_allow_writes(self) -> None:
         app = RasterModeHarness("flow", "flow")
 
@@ -221,6 +243,7 @@ class AddSelectedCellRegressionTests(unittest.TestCase):
 class FlowStatusHarness(FlowStatusMixin):
     def __init__(self) -> None:
         self.mode_var = FakeVar("flow")
+        self.display_mode_var = FakeVar("flow")
         self.tool_var = FakeVar("brush")
         self.autosave_var = FakeVar(True)
         self.mode_status_var = FakeVar()
@@ -231,8 +254,11 @@ class FlowStatusHarness(FlowStatusMixin):
         self.dem_cache_status_var = FakeVar("已生成")
         self.confluence_mode_var = FakeVar("范围SHP")
         self.confluence_max_distance_var = FakeVar(12)
-        self.stream_raster = object()
-        self.flow_raster = object()
+        self.stream_raster = CoordinateRaster(3, 3, "stream")
+        self.flow_raster = CoordinateRaster(1, 1, "flow")
+        self.zoom_var = FakeVar(1.0)
+        self._view_x = 0.0
+        self._view_y = 0.0
         self.dem_path = object()
         self.confluence_polygon_layer = object()
         self.confirmed_flow_segment_cells = {
@@ -327,8 +353,11 @@ class FlowAssistViewStateHarness(UIStateMixin, FlowWorkflowMixin):
         self.selected_flow_region = (0, 2, 0, 2)
         self.flow_skeleton_outlet = (2, 2)
         self.flow_preview_target_var = FakePreviewTarget()
-        self.stream_raster = object()
-        self.flow_raster = object()
+        self.stream_raster = CoordinateRaster(3, 3, "stream")
+        self.flow_raster = CoordinateRaster(1, 1, "flow")
+        self.zoom_var = FakeVar(1.0)
+        self._view_x = 0.0
+        self._view_y = 0.0
         self.dem_path = object()
         self.dem_cache_arrays = object()
         self.dem_cache_metadata = object()
@@ -402,6 +431,7 @@ class ToolChangeRefreshHarness(FlowControlRefreshHarness):
     def __init__(self) -> None:
         super().__init__()
         self.mode_var = FakeVar("flow")
+        self.display_mode_var = FakeVar("flow")
         self.tool_var = FakeVar("brush")
         self.info_var = FakeVar()
         for name in (
@@ -425,6 +455,7 @@ class ToolChangeRefreshHarness(FlowControlRefreshHarness):
 class ModeChangeRefreshHarness(FlowStatusMixin, UIStateMixin, FlowStateMixin):
     def __init__(self) -> None:
         self.mode_var = FakeVar("flow")
+        self.display_mode_var = FakeVar("flow")
         self.tool_var = FakeVar("brush")
         self.autosave_var = FakeVar(True)
         self.mode_status_var = FakeVar()
@@ -437,8 +468,11 @@ class ModeChangeRefreshHarness(FlowStatusMixin, UIStateMixin, FlowStateMixin):
         self.confluence_max_distance_var = FakeVar(12)
         self.flow_preview_target_var = FakeVar("confluence")
         self.info_var = FakeVar()
-        self.stream_raster = object()
-        self.flow_raster = object()
+        self.stream_raster = CoordinateRaster(3, 3, "stream")
+        self.flow_raster = CoordinateRaster(1, 1, "flow")
+        self.zoom_var = FakeVar(1.0)
+        self._view_x = 0.0
+        self._view_y = 0.0
         self.dem_path = None
         self.dem_cache_arrays = None
         self.dem_cache_metadata = None
@@ -840,6 +874,33 @@ class FlowAssistUiModelTests(unittest.TestCase):
         self.assertFalse(without_cache_facts.dem_cache_ready)
         self.assertFalse(
             without_cache_state.enabled[CommandId.EVALUATE_DEM_PREVIEW]
+        )
+
+    def test_mode_status_prominently_reports_read_only_layer_mismatch(self) -> None:
+        app = FlowStatusHarness()
+        app.display_mode_var.set("stream")
+        view_state = derive_flow_assist_state(
+            FlowAssistFacts(has_stream=True, has_flow=True)
+        )
+
+        app.update_mode_status(view_state)
+
+        self.assertIn("只读选择状态", app.mode_status_var.get())
+        self.assertIn("当前显示河道", app.mode_status_var.get())
+        self.assertIn("编辑目标为流向", app.mode_status_var.get())
+        self.assertIn("切换显示图层后才能写入", app.mode_status_var.get())
+
+    def test_mode_status_reports_matching_layer_as_editable(self) -> None:
+        app = FlowStatusHarness()
+        view_state = derive_flow_assist_state(
+            FlowAssistFacts(has_stream=True, has_flow=True)
+        )
+
+        app.update_mode_status(view_state)
+
+        self.assertEqual(
+            app.mode_status_var.get(),
+            "编辑目标：流向 | 显示图层：流向 | 可编辑",
         )
 
     def test_flow_status_uses_supplied_view_state_summary(self) -> None:

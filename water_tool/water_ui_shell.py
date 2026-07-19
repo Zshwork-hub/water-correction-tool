@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+import tkinter as tk
 from tkinter import ttk
 
 from .water_shell_model import NavigationId
@@ -65,7 +66,7 @@ def build_application_shell(app) -> UiShellHandles:
     shell = ttk.Frame(app, style="App.TFrame")
     shell.grid(row=0, column=0, sticky="nsew")
     shell.columnconfigure(0, weight=1)
-    shell.rowconfigure(1, weight=1)
+    shell.rowconfigure(2, weight=1)
 
     toolbar = ttk.Frame(shell, style="Panel.TFrame", padding=(8, 6))
     toolbar.grid(row=0, column=0, sticky="ew")
@@ -102,10 +103,32 @@ def build_application_shell(app) -> UiShellHandles:
         command=app.update_mode_status,
     )
     app.chk_autosave.pack(side="right")
+    ttk.Label(toolbar, text="显示图层", style="Muted.TLabel").pack(side="left", padx=(8, 4))
+    app.display_layer_box = ttk.Combobox(
+        toolbar,
+        state="readonly",
+        width=7,
+        values=("河道", "流向"),
+        textvariable=app.display_mode_label_var,
+    )
+    app.display_layer_box.pack(side="left", padx=(0, 4))
+    app.display_layer_box.bind("<<ComboboxSelected>>", lambda _event: app.on_display_mode_changed())
+    ToolTip(app.display_layer_box, "选择地图显示的栅格图层；显示图层与编辑目标不一致时进入只读选择状态。")
     ToolTip(app.chk_autosave, "启用或关闭定时自动保存。")
 
     content = ttk.Frame(shell, style="App.TFrame", padding=(8, 8, 8, 0))
-    content.grid(row=1, column=0, sticky="nsew")
+    mode_strip = ttk.Frame(shell, style="ModeStatus.TFrame")
+    mode_strip.grid(row=1, column=0, sticky="ew")
+    mode_strip.columnconfigure(0, weight=1)
+    app.display_status_label = ttk.Label(
+        mode_strip,
+        textvariable=app.mode_status_var,
+        style="ModeStatus.TLabel",
+        anchor="w",
+    )
+    app.display_status_label.grid(row=0, column=0, sticky="ew")
+
+    content.grid(row=2, column=0, sticky="nsew")
     content.columnconfigure(1, weight=1)
     content.rowconfigure(0, weight=1)
 
@@ -128,7 +151,7 @@ def build_application_shell(app) -> UiShellHandles:
     page_host.rowconfigure(0, weight=1)
 
     status_bar = ttk.Frame(shell, style="App.TFrame")
-    status_bar.grid(row=2, column=0, sticky="ew")
+    status_bar.grid(row=3, column=0, sticky="ew")
     status_bar.columnconfigure(0, weight=1)
     ttk.Label(status_bar, textvariable=app.info_var, style="Status.TLabel", anchor="w").grid(
         row=0, column=0, sticky="ew"

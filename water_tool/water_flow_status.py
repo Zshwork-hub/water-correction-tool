@@ -11,14 +11,27 @@ class FlowStatusMixin:
             return
         if view_state is None:
             view_state = self._flow_assist_view_state()
-        mode_text = "订正河道" if self.mode_var.get() == "stream" else "订正流向"
+        mode_text = "河道" if self.mode_var.get() == "stream" else "流向"
+        display_mode = getattr(self, "display_mode_var", self.mode_var).get()
+        display_text = "河道" if display_mode == "stream" else "流向"
+        if self.mode_var.get() == display_mode:
+            mode_status = f"编辑目标：{mode_text} | 显示图层：{display_text} | 可编辑"
+            status_style = "ModeStatus.TLabel"
+        else:
+            mode_status = (
+                f"只读选择状态：当前显示{display_text}，编辑目标为{mode_text}；"
+                "切换显示图层后才能写入。"
+            )
+            status_style = "ReadOnlyModeStatus.TLabel"
+        self.mode_status_var.set(mode_status)
+        if hasattr(self, "display_status_label"):
+            self.display_status_label.configure(style=status_style)
         tool_text = "画笔" if self.tool_var.get() == "brush" else "橡皮擦" if self.tool_var.get() == "eraser" else self.tool_var.get()
         autosave_text = "开启" if self.autosave_var.get() else "关闭"
         stream_loaded = "已加载" if self.stream_raster is not None else "未加载"
         flow_loaded = "已加载" if self.flow_raster is not None else "未加载"
         dem_loaded = "已加载" if getattr(self, "dem_path", None) is not None else "未加载"
         dem_cache_text = self.dem_cache_status_var.get() if hasattr(self, "dem_cache_status_var") else "未生成"
-        self.mode_status_var.set(f"当前模式：{mode_text}")
         self.tool_status_var.set(f"当前工具：{tool_text}  快捷键 {self._shortcut_label('brush')}=画笔 / {self._shortcut_label('eraser')}=橡皮擦")
         self.flow_status_var.set(f"流向辅助：{view_state.summary}")
         self.session_status_var.set(f"数据：河道{stream_loaded}，流向{flow_loaded}，DEM{dem_loaded}；DEM缓存：{dem_cache_text}；自动保存{autosave_text}")

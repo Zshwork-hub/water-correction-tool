@@ -24,6 +24,9 @@ UI_SPACING = {
 
 def apply_ui_theme(style) -> None:
     style.configure("App.TFrame", background=UI_COLORS["background"])
+    style.configure("ModeStatus.TFrame", background="#E8F0FE")
+    style.configure("ModeStatus.TLabel", background="#E8F0FE", foreground=UI_COLORS["text"], padding=(10, 5), font=("TkDefaultFont", 9, "bold"))
+    style.configure("ReadOnlyModeStatus.TLabel", background="#FEF3C7", foreground="#78350F", padding=(10, 5), font=("TkDefaultFont", 9, "bold"))
     style.configure("Panel.TFrame", background=UI_COLORS["panel"])
     style.configure(
         "Nav.TButton",

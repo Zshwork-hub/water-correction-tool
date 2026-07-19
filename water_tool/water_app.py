@@ -77,6 +77,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
 
         self.mode_var = tk.StringVar(value="stream")
         self.display_mode_var = tk.StringVar(value="stream")
+        self.display_mode_label_var = tk.StringVar(value="河道")
         self.navigation_var = tk.StringVar(value="stream")
         self._project_data_dialog = None
         self.tool_var = tk.StringVar(value="brush")
@@ -405,7 +406,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.confluence_transformer = self._build_layer_transformer(self.confluence_polygon_layer)
 
     def _build_layer_transformer(self, layer) -> Optional[Transformer]:
-        return self._build_layer_transformer_for_raster(layer, self.get_active_raster())
+        return self._build_layer_transformer_for_raster(layer, self.get_display_raster())
 
     def _build_layer_transformer_for_raster(self, layer, raster: Optional[RasterData]) -> Optional[Transformer]:
         if not CRS or not Transformer or not layer:
@@ -468,6 +469,9 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             return
         self._invalidate_dem_cache_for_raster_change()
         self.stream_raster = raster
+        if self.get_display_raster() is None:
+            self.display_mode_var.set("stream")
+            self._sync_display_mode_label()
         self.original_stream_raster = self.stream_raster.copy()
         self.stream_file_var.set(self._store_path(path))
         if switch_mode:
@@ -493,6 +497,9 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             return
         self._invalidate_dem_cache_for_raster_change()
         self.flow_raster = raster
+        if self.get_display_raster() is None:
+            self.display_mode_var.set("flow")
+            self._sync_display_mode_label()
         self.original_flow_raster = self.flow_raster.copy()
         self.flow_file_var.set(self._store_path(path))
         if switch_mode:
@@ -572,6 +579,31 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
     def can_modify_active_raster(self) -> bool:
         return self.mode_var.get() == self.display_mode_var.get() and self.get_edit_raster() is not None
 
+    def display_mode(self) -> str:
+        return self.display_mode_var.get()
+
+    def display_mode_name(self) -> str:
+        return "河道" if self.display_mode() == "stream" else "流向"
+
+    def _rasters_share_grid(self) -> bool:
+        if self.stream_raster is None or self.flow_raster is None:
+            return True
+        if (
+            self.stream_raster.nrows != self.flow_raster.nrows
+            or self.stream_raster.ncols != self.flow_raster.ncols
+        ):
+            return False
+        keys = ("xllcorner", "yllcorner", "cellsize")
+        return all(
+            math.isclose(
+                float(self.stream_raster.header.values[key]),
+                float(self.flow_raster.header.values[key]),
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+            for key in keys
+        )
+
     def get_active_raster(self) -> Optional[RasterData]:
         return self.get_edit_raster()
 
@@ -597,21 +629,23 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             if self.stream_raster is None:
                 messagebox.showwarning("提示", "当前没有加载河道文件。")
                 return
-            self.mode_var.set("stream")
-            self.on_mode_changed()
+            self.display_mode_var.set("stream")
+            self._sync_display_mode_label()
+            self.update_mode_status()
         elif target == "flow":
             if self.flow_raster is None:
                 messagebox.showwarning("提示", "当前没有加载流向文件。")
                 return
-            self.mode_var.set("flow")
-            self.on_mode_changed()
+            self.display_mode_var.set("flow")
+            self._sync_display_mode_label()
+            self.update_mode_status()
         elif target == "vector":
             if self.vector_layer is None:
                 messagebox.showwarning("提示", "当前没有加载河流SHP。")
                 return
             self._maybe_setup_transformer()
 
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is None:
             return
         self.update_idletasks()
@@ -644,7 +678,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         if self.vector_layer is None:
             messagebox.showwarning("提示", "当前没有加载河流SHP。")
             return
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is None:
             messagebox.showwarning("提示", "请先加载当前模式对应的ASC栅格。")
             return
@@ -686,7 +720,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         return row0, col0, row1, col1
 
     def _set_viewport_center(self, row_center: float, col_center: float, zoom: float, width: int, height: int) -> None:
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is None:
             return
         total_w = max(1, int(round(raster.ncols * zoom)))
@@ -714,7 +748,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         except Exception:
             old_zoom = 1.0
         old_zoom = max(0.1, min(old_zoom, 16.0))
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is not None:
             center_row = (self._view_y + max(1, self.canvas.winfo_height()) * 0.5) / old_zoom
             center_col = (self._view_x + max(1, self.canvas.winfo_width()) * 0.5) / old_zoom
@@ -732,7 +766,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
 
     def on_canvas_configure(self, _event: tk.Event) -> None:
         self._canvas_size = (max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height()))
-        if self.rendered_image is None and self.get_active_raster() is not None:
+        if self.rendered_image is None and self.get_display_raster() is not None:
             self.render(full=True)
         else:
             self.schedule_view_refresh()
@@ -833,7 +867,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         if not self._secondary_dragging and press_hit is not None:
             self.selected_flow_cell = (row, col)
             self.selected_flow_region = None
-            raster = self.get_active_raster()
+            raster = self.get_display_raster()
             if raster is not None:
                 value = raster.value_at(row, col)
                 if self.mode_var.get() == "flow" and value in DIR_ORDER:
@@ -865,7 +899,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.render(full=False)
 
     def canvas_to_rc(self, x: float, y: float) -> Optional[Tuple[int, int, float, float]]:
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is None:
             return None
         zoom = float(self.zoom_var.get())
@@ -879,7 +913,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         return None
 
     def _scroll_view(self, axis: str, *args) -> None:
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is None:
             return
         zoom = float(self.zoom_var.get())
@@ -910,7 +944,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self._update_scrollbars(total_w, total_h, canvas_width, canvas_height)
 
     def _set_viewport_offset(self, view_x: float, view_y: float) -> None:
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is None:
             return
         zoom = float(self.zoom_var.get())
@@ -948,7 +982,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         if now - self._last_motion_update < 0.03:
             return
         hit = self.canvas_to_rc(event.x, event.y)
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if hit and raster:
             row, col, wx, wy = hit
             value = raster.value_at(row, col)
@@ -1095,7 +1129,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             or self.compare_original_var.get()
             or self.vector_layer is not None
             or (self.confluence_polygon_layer is not None and self.show_confluence_polygon_var.get())
-            or (self.mode_var.get() == "flow" and self.show_flow_arrows_var.get())
+            or (self.display_mode() == "flow" and self.show_flow_arrows_var.get())
         )
 
     def preview_flow_from_shp(self) -> None:
@@ -1141,7 +1175,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         return suggestions
 
     def render(self, full: bool = False) -> None:
-        raster = self.get_active_raster()
+        raster = self.get_display_raster()
         if raster is None:
             self.canvas.delete("all")
             self.canvas.create_text(20, 20, anchor="nw", text="请先加载 ASC 栅格文件。", fill="#555")
@@ -1153,7 +1187,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         width = max(1, self.canvas.winfo_width())
         height = max(1, self.canvas.winfo_height())
         signature = (
-            self.active_mode(),
+            self.display_mode(),
             zoom,
             raster.path.resolve(),
             raster.ncols,
@@ -1174,10 +1208,10 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         rebuild = full or self._full_render_requested or self._render_signature != signature or self._viewport_cache_key != (signature, round(self._view_x, 2), round(self._view_y, 2), width, height)
         if rebuild:
             self._sync_viewport_for_zoom(raster, zoom, width, height)
-            compare_raster = self.get_original_active_raster() if self.compare_original_var.get() else None
+            compare_raster = self.get_original_display_raster() if self.compare_original_var.get() else None
             self.base_scaled_image, self.overlay_image = render_viewport_layers(
                 raster,
-                self.active_mode(),
+                self.display_mode(),
                 zoom,
                 self._view_x,
                 self._view_y,
@@ -1216,10 +1250,10 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         elif self._viewport_cache_image is not None:
             self.rendered_image = self._apply_selection_overlay(self._viewport_cache_image.copy(), raster, zoom)
         else:
-            compare_raster = self.get_original_active_raster() if self.compare_original_var.get() else None
+            compare_raster = self.get_original_display_raster() if self.compare_original_var.get() else None
             self.base_scaled_image, self.overlay_image = render_viewport_layers(
                 raster,
-                self.active_mode(),
+                self.display_mode(),
                 zoom,
                 self._view_x,
                 self._view_y,
@@ -1248,13 +1282,13 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.info_var.set(self._render_status_text(raster, zoom))
 
     def _render_status_text(self, raster: RasterData, zoom: float) -> str:
-        return f"{self.mode_name()} | {raster.path.name} | {raster.ncols}x{raster.nrows} | 缩放 {zoom:.3f}"
+        return f"显示{self.display_mode_name()} | {raster.path.name} | {raster.ncols}x{raster.nrows} | 缩放 {zoom:.3f}"
 
     def _build_compare_base(self, base: Image.Image, raster: RasterData, zoom: float) -> Image.Image:
-        original = self.get_original_active_raster()
+        original = self.get_original_display_raster()
         if original is None:
             return base
-        original_base = build_base_image(original, self.active_mode(), self.stream_palette, self.flow_palette)
+        original_base = build_base_image(original, self.display_mode(), self.stream_palette, self.flow_palette)
         if original_base.size != base.size:
             original_base = original_base.resize(base.size, Image.NEAREST)
         return Image.blend(base, original_base, 0.45)
@@ -1270,7 +1304,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
 
     def _cell_color(self, raster: RasterData, row: int, col: int) -> RGBA:
         value = raster.value_at(row, col)
-        if self.active_mode() == "stream":
+        if self.display_mode() == "stream":
             if value == raster.header.nodata:
                 color = self.stream_palette["nodata"]
             elif value == STREAM_VALUE:
@@ -1283,10 +1317,10 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
             else:
                 color = self.flow_palette.get(value, (200, 200, 200, 255))
         if self.compare_original_var.get():
-            original = self.get_original_active_raster()
+            original = self.get_original_display_raster()
             if original is not None:
                 original_value = original.value_at(row, col)
-                if self.active_mode() == "stream":
+                if self.display_mode() == "stream":
                     if original_value == original.header.nodata:
                         original_color = self.stream_palette["nodata"]
                     elif original_value == STREAM_VALUE:
@@ -1345,7 +1379,7 @@ class WaterCorrectionApp(WorkspaceMixin, ProjectWorkflowMixin, DemWorkflowMixin,
         self.destroy()
 
     def export_active(self) -> None:
-        raster = self.get_active_raster()
+        raster = self.get_edit_raster()
         if raster is None:
             messagebox.showwarning("提示", "当前没有可导出的栅格。")
             return

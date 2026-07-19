@@ -17,7 +17,7 @@ from water_tool.water_shell_model import (
 )
 from water_tool.water_legacy_pages import build_display_page, build_flow_compatibility_page, build_history_page
 from water_tool.water_stream_page import build_stream_page
-from water_tool.water_ui_shell import UiShellHandles, bind_control_registry, merge_control_registries
+from water_tool.water_ui_shell import UiShellHandles, bind_control_registry, build_application_shell, merge_control_registries
 from water_tool.water_ui_commands import CommandId
 from water_tool.water_ui_components import ScrollableTaskPanel, normalize_wheel_steps
 from water_tool.water_ui_theme import UI_COLORS, UI_SPACING, apply_ui_theme
@@ -242,6 +242,15 @@ class ShellModelTests(unittest.TestCase):
         self.assertNotIn("bind_all", source)
         self.assertNotIn("unbind_all", source)
 
+    def test_shell_exposes_display_layer_selector_and_fixed_mode_status(self) -> None:
+        import inspect
+
+        source = inspect.getsource(build_application_shell)
+        self.assertIn("显示图层", source)
+        self.assertIn("display_mode_label_var", source)
+        self.assertIn("mode_status_var", source)
+        self.assertIn("ModeStatus.TLabel", source)
+
     def test_theme_registers_required_widget_styles(self) -> None:
         style = RecordingStyle()
 
@@ -255,6 +264,8 @@ class ShellModelTests(unittest.TestCase):
                 "NavSelected.TButton",
                 "Primary.TButton",
                 "Status.TLabel",
+                "ModeStatus.TLabel",
+                "ReadOnlyModeStatus.TLabel",
                 "Muted.TLabel",
             }.issubset(style.configured)
         )
